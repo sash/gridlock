@@ -184,7 +184,8 @@ export class GameApp {
     if (!g) return;
     this.board.render(g.state.board, g.state.aux);
     this.tray.render(g.state.tray, this.drag?.slot ?? null);
-    this.hud.setScore(g.state.score, storage.getHighScore(g.state.mode));
+    // Zen has no leaderboard per spec §6 — never show or track a best score
+    this.hud.setScore(g.state.score, g.state.mode === 'zen' ? 0 : storage.getHighScore(g.state.mode));
     this.hud.setStreak(g.state.streak, g.state.grace, streakMultiplier(g.state.streak));
     this.hud.setRushTime(g.state.rushTimeLeft);
     this.hud.setPowerUps(this.inventory, g.state.used, this.armed, !g.state.over);
@@ -344,7 +345,7 @@ export class GameApp {
       this.audio.powerUp();
     }
     storage.setInventory(this.inventory);
-    storage.setHighScore(g.state.mode, g.state.score);
+    if (g.state.mode !== 'zen') storage.setHighScore(g.state.mode, g.state.score);
     this.persist();
     this.refresh();
     if (result.gameOver) this.finishGame();
@@ -355,7 +356,7 @@ export class GameApp {
     const g = this.game!;
     g.state.over = true;
     this.audio.gameOver();
-    storage.setHighScore(g.state.mode, g.state.score);
+    if (g.state.mode !== 'zen') storage.setHighScore(g.state.mode, g.state.score);
     storage.clearSavedGame(g.state.mode);
     let card: string | undefined;
     if (g.state.mode === 'daily') {
