@@ -1,0 +1,249 @@
+import { Container, Graphics, Text } from 'pixi.js';
+import { BOARD_SIZE, CELL, idx, type Board, type Lines } from '../core/board';
+import { getPiece } from '../core/pieces';
+import type { SpecialsState } from '../core/specials';
+import { SPECIAL_COLORS, SPECIAL_GLYPHS, type Theme } from './theme';
+
+const GAP = 2;
+
+function drawCell(g: Graphics, x: number, y: number, size: number, color: number, alpha = 1): void {
+  g.roundRect(x + GAP, y + GAP, size - GAP * 2, size - GAP * 2, size * 0.18).fill({ color, alpha });
+}
+
+/** The 8×8 grid: cells, special glyphs, ghost preview, glow and pulse layers. */
+export class BoardView {
+  readonly container = new Container();
+  private bg = new Graphics();
+  private cells = new Graphics();
+  private ghost = new Graphics();
+  private pulse = new Graphics();
+  private dim = new Graphics();
+  private glyphs = new Container();
+  cellSize = 0;
+
+  constructor(private theme: Theme) {
+    this.container.addChild(this.bg, this.cells, this.glyphs, this.pulse, this.ghost, this.dim);
+  }
+
+  setTheme(theme: Theme): void {
+    this.theme = theme;
+  }
+
+  resize(sizePx: number): void {
+    this.cellSize = sizePx / BOARD_SIZE;
+    this.bg.clear();
+    this.bg
+      .roundRect(-6, -6, sizePx + 12, sizePx + 12, 14)
+      .fill(this.theme.boardBg);
+  }
+
+  toCell(localX: number, localY: number): { col: number; row: number } {
+    return {
+      col: Math.round(localX / this.cellSize),
+      row: Math.round(localY / this.cellSize),
+    };
+  }
+
+  render(board: Board, aux: SpecialsState): void {
+    const cs = this.cellSize;
+    const g = this.cells;
+    g.clear();
+    this.glyphs.removeChildren();
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        const v = board[idx(c, r)];
+        const x = c * cs;
+        const y = r * cs;
+        if (v === CELL.EMPTY) {
+          drawCell(g, x, y, cs, this.theme.emptyCell);
+        } else if (v >= 1 && v <= 8) {
+          drawCell(g, x, y, cs, this.theme.colors[v - 1]);
+        } else {
+          drawCell(g, x, y, cs, SPECIAL_COLORS[v] ?? 0x888888);
+          const glyph = new Text({
+            text: SPECIAL_GLYPHS[v] ?? '?',
+            style: { fontSize: cs * 0.5 },
+          });
+          glyph.anchor.set(0.5);
+          glyph.position.set(x + cs / 2, y + cs / 2);
+          this.glyphs.addChild(glyph);
+          const fuse = aux.bombs[idx(c, r)];
+          if (v === CELL.BOMB && fuse !== undefined) {
+            const counter = new Text({
+              text: String(fuse),
+              style: { fontSize: cs * 0.32, fill: 0xffffff, fontWeight: '700' },
+            });
+            counter.anchor.set(1, 0);
+            counter.position.set(x + cs - 4, y + 2);
+            this.glyphs.addChild(counter);
+          }
+        }
+      }
+    }
+  }
+
+  /** Ghost of the dragged piece + glow on lines the drop would complete. */
+  renderGhost(
+    pieceId: string | null,
+    col: number,
+    row: number,
+    valid: boolean,
+    wouldClear: Lines | null,
+  ): void {
+    const g = this.ghost;
+    g.clear();
+    if (!pieceId) return;
+    const cs = this.cellSize;
+    if (wouldClear) {
+      for (const r of wouldClear.rows) {
+        g.roundRect(0, r * cs + 1, cs * BOARD_SIZE, cs - 2, 6).fill({ color: 0xffffff, alpha: 0.28 });
+      }
+      for (const c of wouldClear.cols) {
+        g.roundRect(c * cs + 1, 0, cs - 2, cs * BOARD_SIZE, 6).fill({ color: 0xffffff, alpha: 0.28 });
+      }
+    }
+    const piece = getPiece(pieceId);
+    const color = valid ? this.theme.colors[piece.color - 1] : 0xd23b4e;
+    for (const [pc, pr] of piece.cells) {
+      const c = col + pc;
+      const r = row + pr;
+      if (c < 0 || c >= BOARD_SIZE || r < 0 || r >= BOARD_SIZE) continue;
+      drawCell(g, c * cs, r * cs, cs, color, valid ? 0.45 : 0.35);
+    }
+  }
+
+  clearGhost(): void {
+    this.ghost.clear();
+  }
+
+  /** Near-death warning: dim the board, pulse the zones where pieces still fit. */
+  renderNearDeath(active: boolean, zones: ReadonlySet<number>, phase: number): void {
+    this.dim.clear();
+    this.pulse.clear();
+    if (!active) return;
+    const size = this.cellSize * BOARD_SIZE;
+    this.dim.rect(0, 0, size, size).fill({ color: 0x000000, alpha: 0.35 });
+    const alpha = 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(phase * 5));
+    for (const i of zones) {
+      const c = i % BOARD_SIZE;
+      const r = Math.floor(i / BOARD_SIZE);
+      drawCell(this.pulse, c * this.cellSize, r * this.cellSize, this.cellSize, 0xffffff, alpha);
+    }
+  }
+}
+
+/** The 3-slot piece tray under the board. */
+export class TrayView {
+  readonly container = new Container();
+  private slots: Container[] = [];
+  slotWidth = 0;
+  height = 0;
+
+  constructor(private theme: Theme) {
+    for (let i = 0; i < 3; i++) {
+      const slot = new Container();
+      this.container.addChild(slot);
+      this.slots.push(slot);
+    }
+  }
+
+  setTheme(theme: Theme): void {
+    this.theme = theme;
+  }
+
+  resize(width: number): void {
+    this.slotWidth = width / 3;
+    this.height = this.slotWidth * 0.9;
+    this.slots.forEach((s, i) => s.position.set(i * this.slotWidth, 0));
+  }
+
+  /** Cell size used to draw tray pieces (pieces are shown shrunken). */
+  trayCellSize(pieceId: string): number {
+    const p = getPiece(pieceId);
+    const maxSpan = Math.max(p.w, p.h, 3);
+    return Math.min((this.slotWidth * 0.82) / maxSpan, this.height * 0.8 / maxSpan);
+  }
+
+  render(tray: ReadonlyArray<string | null>, hiddenSlot: number | null): void {
+    this.slots.forEach((slot, i) => {
+      slot.removeChildren();
+      const id = tray[i];
+      if (!id || i === hiddenSlot) return;
+      const piece = getPiece(id);
+      const cs = this.trayCellSize(id);
+      const g = new Graphics();
+      for (const [c, r] of piece.cells) {
+        drawCell(g, c * cs, r * cs, cs, this.theme.colors[piece.color - 1]);
+      }
+      g.position.set(
+        (this.slotWidth - piece.w * cs) / 2,
+        (this.height - piece.h * cs) / 2,
+      );
+      slot.addChild(g);
+    });
+  }
+
+  slotAt(localX: number, localY: number): number | null {
+    if (localY < -10 || localY > this.height + 24) return null;
+    const i = Math.floor(localX / this.slotWidth);
+    return i >= 0 && i < 3 ? i : null;
+  }
+}
+
+interface Particle {
+  g: Graphics;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+}
+
+/** Short directional pops when lines clear. Never blocks input. */
+export class ParticleSystem {
+  readonly container = new Container();
+  private particles: Particle[] = [];
+
+  burst(cellIndices: readonly number[], lines: Lines, cellSize: number, color: number): void {
+    const rows = new Set(lines.rows);
+    const cols = new Set(lines.cols);
+    for (const i of cellIndices) {
+      const c = i % BOARD_SIZE;
+      const r = Math.floor(i / BOARD_SIZE);
+      const horizontal = rows.has(r);
+      const vertical = cols.has(c);
+      for (let n = 0; n < 3; n++) {
+        const g = new Graphics();
+        const s = cellSize * (0.12 + Math.random() * 0.12);
+        g.rect(-s / 2, -s / 2, s, s).fill(color);
+        g.position.set((c + 0.5) * cellSize, (r + 0.5) * cellSize);
+        const speed = cellSize * (4 + Math.random() * 6);
+        const jitter = (Math.random() - 0.5) * cellSize * 2;
+        let vx = (Math.random() - 0.5) * speed;
+        let vy = (Math.random() - 0.5) * speed;
+        if (horizontal && !vertical) {
+          vx = (c < BOARD_SIZE / 2 ? -1 : 1) * speed;
+          vy = jitter;
+        } else if (vertical && !horizontal) {
+          vy = (r < BOARD_SIZE / 2 ? -1 : 1) * speed;
+          vx = jitter;
+        }
+        this.container.addChild(g);
+        this.particles.push({ g, vx, vy, life: 0, maxLife: 0.15 + Math.random() * 0.05 });
+      }
+    }
+  }
+
+  update(dt: number): void {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life += dt;
+      p.g.position.x += p.vx * dt;
+      p.g.position.y += p.vy * dt;
+      p.g.alpha = Math.max(0, 1 - p.life / p.maxLife);
+      if (p.life >= p.maxLife) {
+        p.g.destroy();
+        this.particles.splice(i, 1);
+      }
+    }
+  }
+}

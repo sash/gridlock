@@ -50,6 +50,7 @@ describe('placement', () => {
     g.state.board[idx(0, 7)] = 1; // avoid a perfect clear
     const res = g.place(0, 7, 0)!;
     expect(res.linesCleared).toBe(1);
+    expect(res.lines.rows).toEqual([0]); // direction info for clear particles
     expect(g.state.streak).toBe(1);
     expect(g.state.score).toBe(1 + 120); // 1 cell + 80 × 1.5
     expect(g.state.board[idx(0, 0)]).toBe(CELL.EMPTY);

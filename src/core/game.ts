@@ -57,6 +57,7 @@ export interface SerializedGame extends Omit<GameState, 'board'> {
 export interface PlaceResult {
   cellPoints: number;
   linesCleared: number;
+  lines: Lines;
   linePointsGained: number;
   gemBonus: number;
   clearedCells: number[];
@@ -155,6 +156,7 @@ export class Game {
     const result: PlaceResult = {
       cellPoints: piece.cells.length,
       linesCleared: 0,
+      lines: { rows: [], cols: [] },
       linePointsGained: 0,
       gemBonus: 0,
       clearedCells: [],
@@ -170,6 +172,7 @@ export class Game {
     s.score += piece.cells.length;
 
     const lines = findCompletedLines(s.board);
+    result.lines = lines;
     result.linesCleared = lines.rows.length + lines.cols.length;
     const clearRes = applyClears(s.board, lines);
     result.clearedCells = clearRes.clearedCells;
