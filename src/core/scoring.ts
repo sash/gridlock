@@ -21,6 +21,6 @@ export interface StreakState {
 
 export function updateStreak(state: StreakState, cleared: boolean): StreakState {
   if (cleared) return { streak: state.streak + 1, grace: false };
-  if (state.grace) return { streak: 0, grace: false };
+  if (state.grace || state.streak === 0) return { streak: 0, grace: false };
   return { streak: state.streak, grace: true };
 }
