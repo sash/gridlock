@@ -1,6 +1,6 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import { Game, type Mode, type PlaceResult, type PowerUpKind } from '../core/game';
-import { BOARD_SIZE } from '../core/board';
+import { BOARD_SIZE, CELL } from '../core/board';
 import { getPiece } from '../core/pieces';
 import { streakMultiplier } from '../core/scoring';
 import { dailyKey, dailySeed, shareCard } from '../core/daily';
@@ -12,6 +12,15 @@ import * as storage from './storage';
 
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
+
+/** Shown once, the first time each special cell ever appears on the board. */
+const SPECIAL_INTROS: Array<[number, string]> = [
+  [CELL.GEM, '💎 A gem! Clear its line for +150'],
+  [CELL.ICE, '🧊 Ice! It takes two clears to remove'],
+  [CELL.BOMB, '💣 A bomb! Clear its line before the counter hits 0'],
+  [CELL.STONE, '🪨 Petrified! Stone can’t be cleared for 15 placements'],
+  [CELL.WILD, '🌈 Wild earned! It completes both its row and column'],
+];
 
 interface DragState {
   slot: number;
@@ -354,8 +363,32 @@ export class GameApp {
     if (g.state.mode !== 'zen') storage.setHighScore(g.state.mode, g.state.score);
     this.persist();
     this.refresh();
+    this.introduceSpecials();
     if (result.gameOver) this.finishGame();
     return result;
+  }
+
+  /** One-time explainer toast when a special cell type shows up for the first time. */
+  private introduceSpecials(): void {
+    const g = this.game;
+    if (!g) return;
+    let seen: number[];
+    try {
+      seen = JSON.parse(localStorage.getItem('gridlock.seenSpecials') ?? '[]') as number[];
+    } catch {
+      seen = [];
+    }
+    for (const [cell, message] of SPECIAL_INTROS) {
+      if (seen.includes(cell) || !g.state.board.includes(cell)) continue;
+      this.hud.toast(message, 3200);
+      seen.push(cell);
+      try {
+        localStorage.setItem('gridlock.seenSpecials', JSON.stringify(seen));
+      } catch {
+        // storage unavailable — they'll see the toast again next time
+      }
+      break; // one lesson at a time
+    }
   }
 
   private finishGame(): void {

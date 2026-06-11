@@ -18,6 +18,28 @@ test('loads the app with a rendered canvas and menu', async ({ page }) => {
   await expect(page.locator('#gl-overlay-menu h1')).toHaveText('GridLock');
 });
 
+test('menu explains modes and help overlay explains bonuses and power-ups', async ({ page }) => {
+  await page.goto('/');
+  // every mode button carries a description
+  await expect(page.locator('[data-mode="classic"] .gl-mode-desc')).toContainText('high score');
+  await expect(page.locator('[data-mode="rush"] .gl-mode-desc')).toContainText('90 seconds');
+  // help overlay from the menu
+  await page.click('#gl-help-btn-menu');
+  const help = page.locator('#gl-overlay-help');
+  await expect(help).toBeVisible();
+  for (const word of ['Gem', 'Ice', 'Bomb', 'Stone', 'Wild', 'Rotate', 'Swap', 'Hammer', 'Undo']) {
+    await expect(help).toContainText(word);
+  }
+  await page.click('#gl-help-close');
+  await expect(help).toBeHidden();
+  // help is also reachable in-game, and power-up buttons are labeled
+  await page.click('[data-mode="classic"]');
+  await page.waitForFunction(() => window.__game?.game?.state.mode === 'classic');
+  await expect(page.locator('[data-pu="hammer"] .pu-name')).toHaveText('Hammer');
+  await page.click('#gl-help-btn-game');
+  await expect(help).toBeVisible();
+});
+
 test('starting classic deals a tray of 3 and placing via drag scores points', async ({ page }) => {
   await startClassic(page);
 

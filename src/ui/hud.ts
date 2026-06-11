@@ -16,6 +16,13 @@ const CSS = `
   .gl-pu { pointer-events: auto; position: relative; background: rgba(128,128,128,0.18); border: none; border-radius: 12px; width: 54px; height: 54px; font-size: 22px; color: inherit; }
   .gl-pu[disabled] { opacity: 0.35; }
   .gl-pu.armed { outline: 2px solid #ffd166; }
+  .gl-pu .pu-name { display: block; font-size: 9px; font-weight: 600; opacity: 0.75; margin-top: -2px; }
+  .gl-mode-desc { display: block; font-size: 12px; font-weight: 400; opacity: 0.75; margin-top: 3px; }
+  #gl-overlay-help { background: rgba(8, 10, 16, 0.98); }
+  .gl-help-body { max-width: 340px; max-height: 62vh; overflow-y: auto; text-align: left; font-size: 14px; line-height: 1.45; }
+  .gl-help-body h3 { margin: 14px 0 6px; font-size: 15px; }
+  .gl-help-body p, .gl-help-body li { margin: 4px 0; opacity: 0.92; }
+  .gl-help-body ul { margin: 0; padding-left: 4px; list-style: none; }
   .gl-pu .count { position: absolute; top: -4px; right: -4px; background: #ffd166; color: #222; font-size: 11px; font-weight: 800; border-radius: 9px; min-width: 18px; height: 18px; line-height: 18px; }
   .gl-overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(8,10,16,0.86); color: #fff; pointer-events: auto; padding: 24px; text-align: center; }
   .gl-overlay h1 { font-size: 40px; margin: 0; letter-spacing: 1px; }
@@ -32,11 +39,17 @@ const CSS = `
 `;
 
 const PU_ICONS: Record<PowerUpKind, string> = { rotate: '🔄', swap: '🔀', hammer: '🔨', undo: '↩️' };
-const MODES: Array<{ mode: Mode; label: string }> = [
-  { mode: 'classic', label: 'Classic' },
-  { mode: 'daily', label: 'Daily Puzzle' },
-  { mode: 'rush', label: 'Rush — 90s' },
-  { mode: 'zen', label: 'Zen' },
+const PU_INFO: Record<PowerUpKind, { name: string; desc: string }> = {
+  rotate: { name: 'Rotate', desc: 'Tap it, then tap a tray piece to turn it 90°.' },
+  swap: { name: 'Swap', desc: 'Replace all 3 tray pieces with a fresh deal.' },
+  hammer: { name: 'Hammer', desc: 'Tap it, then tap any filled cell to smash it.' },
+  undo: { name: 'Undo', desc: 'Take back your last placement (not after a clear).' },
+};
+const MODES: Array<{ mode: Mode; label: string; desc: string }> = [
+  { mode: 'classic', label: 'Classic', desc: 'Endless — chase your high score' },
+  { mode: 'daily', label: 'Daily Puzzle', desc: 'Same puzzle for everyone · one try per day · share your result' },
+  { mode: 'rush', label: 'Rush', desc: '90 seconds · pieces refill instantly · go fast' },
+  { mode: 'zen', label: 'Zen', desc: 'No game over, no pressure — just placing blocks' },
 ];
 
 export interface HudCallbacks {
@@ -61,7 +74,10 @@ export class Hud {
     this.root.innerHTML = `
       <div class="gl-timer hidden" id="gl-timer"></div>
       <div class="gl-top">
-        <button class="gl-btn" id="gl-menu-btn">☰</button>
+        <div style="display:flex;gap:8px">
+          <button class="gl-btn" id="gl-menu-btn">☰</button>
+          <button class="gl-btn" id="gl-help-btn-game" aria-label="How to play">?</button>
+        </div>
         <div class="gl-score-wrap">
           <div class="gl-score" id="gl-score">0</div>
           <div class="gl-high" id="gl-high"></div>
@@ -72,7 +88,7 @@ export class Hud {
         ${(Object.keys(PU_ICONS) as PowerUpKind[])
           .map(
             (k) =>
-              `<button class="gl-pu" data-pu="${k}" aria-label="${k}">${PU_ICONS[k]}<span class="count" data-count="${k}">0</span></button>`,
+              `<button class="gl-pu" data-pu="${k}" aria-label="${k}" title="${PU_INFO[k].desc}">${PU_ICONS[k]}<span class="pu-name">${PU_INFO[k].name}</span><span class="count" data-count="${k}">0</span></button>`,
           )
           .join('')}
       </div>
@@ -80,10 +96,47 @@ export class Hud {
       <div class="gl-toast" id="gl-toast"></div>
       <div class="gl-overlay" id="gl-overlay-menu">
         <h1>GridLock</h1>
-        ${MODES.map((m) => `<button class="gl-btn primary" data-mode="${m.mode}">${m.label}</button>`).join('')}
+        ${MODES.map(
+          (m) =>
+            `<button class="gl-btn primary" data-mode="${m.mode}">${m.label}<span class="gl-mode-desc">${m.desc}</span></button>`,
+        ).join('')}
+        <button class="gl-btn" id="gl-help-btn-menu">❓ How to play</button>
         <div class="gl-themes" id="gl-themes">
           ${THEMES.map((t) => `<button class="gl-btn" data-theme="${t.id}">${t.label}</button>`).join('')}
         </div>
+      </div>
+      <div class="gl-overlay hidden" id="gl-overlay-help">
+        <h2>How to play</h2>
+        <div class="gl-help-body">
+          <p>Drag pieces from the tray onto the board. Fill a whole <b>row or column</b> to clear
+          it. Pieces can't be rotated — each deal is a little puzzle. The game ends when no
+          remaining piece fits anywhere.</p>
+          <h3>Scoring</h3>
+          <ul>
+            <li>▪️ 1 point per cell placed</li>
+            <li>▪️ Clears: 1 line = 80 · 2 = 200 · 3 = 450 · 4+ = 800 and up</li>
+            <li>🔥 Back-to-back clears build a streak that multiplies line points, up to ×5.
+            It survives exactly one placement without a clear — the flame dims as a warning.</li>
+            <li>✨ Emptying the entire board: +300 Perfect Clear</li>
+          </ul>
+          <h3>Special cells <span style="font-weight:400;opacity:.7">(appear as you play)</span></h3>
+          <ul>
+            <li>💎 <b>Gem</b> — clear its line for +150 points.</li>
+            <li>🧊 <b>Ice</b> — takes two clears: the first cracks it, the second removes it.</li>
+            <li>💣 <b>Bomb</b> — the number counts your placements. Clear its line in time and it
+            blasts a 3×3 area free; let it hit 0 and it petrifies…</li>
+            <li>🪨 <b>Stone</b> — can't be cleared. Crumbles by itself after 15 placements.</li>
+            <li>🌈 <b>Wild</b> — earned by a 3-line clear; helps complete both its row and its column.</li>
+          </ul>
+          <h3>Power-ups <span style="font-weight:400;opacity:.7">(bottom bar, one use each per game)</span></h3>
+          <ul>
+            ${(Object.keys(PU_INFO) as PowerUpKind[])
+              .map((k) => `<li>${PU_ICONS[k]} <b>${PU_INFO[k].name}</b> — ${PU_INFO[k].desc}</li>`)
+              .join('')}
+          </ul>
+          <p style="opacity:.75">Earn more by playing daily, reaching a ×5 streak, or landing a Perfect Clear.</p>
+        </div>
+        <button class="gl-btn primary" id="gl-help-close">Got it</button>
       </div>
       <div class="gl-overlay hidden" id="gl-overlay-over">
         <h2 id="gl-over-title">Game Over</h2>
@@ -97,6 +150,11 @@ export class Hud {
     parent.appendChild(this.root);
 
     this.el('gl-menu-btn').addEventListener('click', () => cb.onMenu());
+    this.el('gl-help-btn-game').addEventListener('click', () => this.showHelp());
+    this.el('gl-help-btn-menu').addEventListener('click', () => this.showHelp());
+    this.el('gl-help-close').addEventListener('click', () =>
+      this.el('gl-overlay-help').classList.add('hidden'),
+    );
     this.el('gl-again-btn').addEventListener('click', () => cb.onRestart());
     this.el('gl-share-btn').addEventListener('click', () => cb.onShare());
     this.el('gl-over-menu-btn').addEventListener('click', () => cb.onMenu());
@@ -163,9 +221,14 @@ export class Hud {
     this.el('gl-overlay-over').classList.add('hidden');
   }
 
+  showHelp(): void {
+    this.el('gl-overlay-help').classList.remove('hidden');
+  }
+
   hideOverlays(): void {
     this.el('gl-overlay-menu').classList.add('hidden');
     this.el('gl-overlay-over').classList.add('hidden');
+    this.el('gl-overlay-help').classList.add('hidden');
   }
 
   showGameOver(opts: { title: string; score: number; high: number; card?: string; shareable: boolean; canRestart: boolean }): void {
@@ -178,10 +241,10 @@ export class Hud {
     this.el('gl-again-btn').classList.toggle('hidden', !opts.canRestart);
   }
 
-  toast(message: string): void {
+  toast(message: string, durationMs = 1600): void {
     const t = this.el('gl-toast');
     t.textContent = message;
     t.style.opacity = '1';
-    setTimeout(() => (t.style.opacity = '0'), 1600);
+    setTimeout(() => (t.style.opacity = '0'), durationMs);
   }
 }
