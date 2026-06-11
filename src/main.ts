@@ -24,7 +24,7 @@ async function boot(): Promise<void> {
   window.__game = new GameApp(app);
 
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    void navigator.serviceWorker.register('/sw.js');
+    void navigator.serviceWorker.register('./sw.js'); // relative: works on subpath hosting
   }
 }
 
