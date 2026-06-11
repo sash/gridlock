@@ -12,7 +12,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "deploy": "npm run build && cd dist && git init -q -b gh-pages && git add -A && git commit -q -m deploy && git push -f git@github.com:sash/gridlock.git gh-pages && cd .. && rm -rf dist/.git"
   },
   "keywords": [],
   "author": "",
