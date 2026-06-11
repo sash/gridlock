@@ -53,6 +53,8 @@ export function spawnOnDeal(
 
 /** After every placement: bomb fuses burn down (0 → stone), stones crumble. */
 export function tickPlacement(board: Board, aux: SpecialsState): void {
+  // snapshot first so a bomb petrifying this tick doesn't also lose a stone turn
+  const stoneKeys = Object.keys(aux.stones);
   for (const key of Object.keys(aux.bombs)) {
     const i = Number(key);
     aux.bombs[i]--;
@@ -62,7 +64,7 @@ export function tickPlacement(board: Board, aux: SpecialsState): void {
       aux.stones[i] = STONE_LIFETIME;
     }
   }
-  for (const key of Object.keys(aux.stones)) {
+  for (const key of stoneKeys) {
     const i = Number(key);
     aux.stones[i]--;
     if (aux.stones[i] <= 0) {
