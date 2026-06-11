@@ -39,7 +39,7 @@ export class GameApp {
   private boardOrigin = { x: 0, y: 0 };
   private trayOrigin = { x: 0, y: 0 };
 
-  constructor(private app: Application) {
+  constructor(app: Application) {
     this.theme = getTheme(storage.getThemeId());
     this.stage = app.stage;
     this.board = new BoardView(this.theme);
@@ -67,7 +67,11 @@ export class GameApp {
     window.addEventListener('pointermove', (e) => this.onPointerMove(e));
     window.addEventListener('pointerup', (e) => this.onPointerUp(e));
     window.addEventListener('pointercancel', () => this.cancelDrag());
-    window.addEventListener('resize', () => this.layout());
+    window.addEventListener('resize', () => {
+      this.layout();
+      // Pixi's own resizeTo handling is rAF-deferred; re-measure after it ran
+      requestAnimationFrame(() => this.layout());
+    });
     window.addEventListener('pagehide', () => this.persist());
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.persist();
@@ -163,8 +167,10 @@ export class GameApp {
   // --- layout ---
 
   private layout(): void {
-    const w = this.app.renderer.width / this.app.renderer.resolution;
-    const h = this.app.renderer.height / this.app.renderer.resolution;
+    // Window dimensions, not renderer ones: the renderer resize is deferred and
+    // can be stale here, and CSS pixels are the space pointer events live in.
+    const w = window.innerWidth;
+    const h = window.innerHeight;
     const topBar = 86;
     const trayH = Math.min(w, 520) / 3 * 0.9;
     const size = Math.min(w - 28, h - topBar - trayH - 110, 520);
