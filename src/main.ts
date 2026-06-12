@@ -10,6 +10,22 @@ declare global {
 }
 
 async function boot(): Promise<void> {
+  // Installed-app mode on iOS can report a layout viewport shorter than the
+  // physical screen, leaving a dead strip at the bottom that fixed elements
+  // (overlays, streak glow) don't cover. Measure the real screen instead.
+  const standalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true;
+  if (standalone) {
+    const setScreenH = () =>
+      document.documentElement.style.setProperty(
+        '--gl-screen-h',
+        `${Math.max(screen.height, window.innerHeight)}px`,
+      );
+    setScreenH();
+    window.addEventListener('resize', setScreenH);
+  }
+
   const app = new Application();
   await app.init({
     resizeTo: window,

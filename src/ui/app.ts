@@ -200,6 +200,24 @@ export class GameApp {
     // Measure the real HUD bar: in standalone PWA mode on iPhone the safe-area
     // inset pushes it well below a hardcoded offset, overlapping the board.
     const topBar = this.hud.topBarBottom() + 12;
+
+    if (w > h) {
+      // landscape: board sized by height, tray as a vertical column beside it
+      const size = Math.min(h - topBar - 88, w * 0.5, 520);
+      const trayLen = size; // 3 stacked slots, each size/3 tall
+      const trayW = size / 3;
+      const totalW = size + 28 + trayW;
+      const x0 = (w - totalW) / 2;
+      this.boardOrigin = { x: x0, y: topBar };
+      this.trayOrigin = { x: x0 + size + 28, y: topBar };
+      this.board.container.position.set(this.boardOrigin.x, this.boardOrigin.y);
+      this.board.resize(size);
+      this.tray.container.position.set(this.trayOrigin.x, this.trayOrigin.y);
+      this.tray.resize(trayLen, true);
+      this.refresh();
+      return;
+    }
+
     const trayH = Math.min(w, 520) / 3 * 0.9;
     const size = Math.min(w - 28, h - topBar - trayH - 110, 520);
     this.boardOrigin = { x: (w - size) / 2, y: topBar };

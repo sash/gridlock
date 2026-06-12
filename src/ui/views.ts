@@ -132,10 +132,11 @@ export class BoardView {
   }
 }
 
-/** The 3-slot piece tray under the board. */
+/** The 3-slot piece tray — horizontal under the board, or a vertical column in landscape. */
 export class TrayView {
   readonly container = new Container();
   private slots: Container[] = [];
+  private vertical = false;
   slotWidth = 0;
   height = 0;
 
@@ -151,10 +152,13 @@ export class TrayView {
     this.theme = theme;
   }
 
-  resize(width: number): void {
-    this.slotWidth = width / 3;
+  resize(length: number, vertical = false): void {
+    this.vertical = vertical;
+    this.slotWidth = length / 3;
     this.height = this.slotWidth * 0.9;
-    this.slots.forEach((s, i) => s.position.set(i * this.slotWidth, 0));
+    this.slots.forEach((s, i) =>
+      s.position.set(vertical ? 0 : i * this.slotWidth, vertical ? i * this.slotWidth : 0),
+    );
   }
 
   /** Cell size used to draw tray pieces (pieces are shown shrunken). */
@@ -184,8 +188,10 @@ export class TrayView {
   }
 
   slotAt(localX: number, localY: number): number | null {
-    if (localY < -10 || localY > this.height + 24) return null;
-    const i = Math.floor(localX / this.slotWidth);
+    const along = this.vertical ? localY : localX;
+    const across = this.vertical ? localX : localY;
+    if (across < -10 || across > (this.vertical ? this.slotWidth : this.height) + 24) return null;
+    const i = Math.floor(along / this.slotWidth);
     return i >= 0 && i < 3 ? i : null;
   }
 }
