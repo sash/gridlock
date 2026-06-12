@@ -13,7 +13,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "playwright test",
-    "deploy": "npm run build && cd dist && git init -q -b gh-pages && git add -A && git commit -q -m deploy && git push -f git@github.com:sash/gridlock.git gh-pages && cd .. && rm -rf dist/.git"
+    "deploy": "npm run build && cd dist && git init -q -b gh-pages && git add -A && git commit -q -m deploy && git push -f git@github.com:sash/gridlock.git gh-pages && cd .. && rm -rf dist/.git",
+    "build:native": "vite build -c vite.native.config.ts && cp dist-native/index.html native/assets/game.html"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +27,7 @@
     "@playwright/test": "^1.60.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^4.1.8"
   },
   "private": true

@@ -39,6 +39,16 @@ npm run e2e        # browser tests (playwright, chromium)
 Monetization (§10) is intentionally not implemented — it is marked optional in the
 spec and requires external ad/payment services.
 
+## Native apps (iOS / Android)
+
+`native/` contains a React Native (Expo) shell that embeds the game as a
+single offline HTML asset in a WebView, with real haptic feedback bridged to
+the native side. See `native/README.md` for build and store-submission steps.
+
+```bash
+npm run build:native   # regenerate the embedded game (dist-native/ → native/assets/)
+```
+
 ## Architecture
 
 - `src/core/` — pure, dependency-free game logic (rng, pieces, board, scoring,

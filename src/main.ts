@@ -39,7 +39,8 @@ async function boot(): Promise<void> {
 
   window.__game = new GameApp(app);
 
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  const inNativeShell = typeof (window as { ReactNativeWebView?: unknown }).ReactNativeWebView !== 'undefined';
+  if ('serviceWorker' in navigator && import.meta.env.PROD && !inNativeShell) {
     // relative path: works on subpath hosting (github.io/gridlock/)
     const reg = await navigator.serviceWorker.register('./sw.js').catch(() => null);
     // check for a new build every time the app comes back to the foreground

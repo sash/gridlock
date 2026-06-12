@@ -3,3 +3,7 @@ dist/
 test-results/
 playwright-report/
 .DS_Store
+native/dist/
+native/node_modules/
+native/.expo/
+native/assets/game.html

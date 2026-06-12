@@ -13,6 +13,13 @@ import * as storage from './storage';
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
 
+/** Haptic cues forwarded to the React Native shell (no-op on the web). */
+function nativeHaptic(kind: 'place' | 'clear' | 'big-clear' | 'perfect' | 'game-over'): void {
+  const bridge = (window as { ReactNativeWebView?: { postMessage(msg: string): void } })
+    .ReactNativeWebView;
+  bridge?.postMessage(JSON.stringify({ type: 'haptic', kind }));
+}
+
 /** Shown once, the first time each special cell ever appears on the board. */
 const SPECIAL_INTROS: Array<[number, string]> = [
   [CELL.GEM, '💎 A gem! Clear its line for +150'],
@@ -401,6 +408,7 @@ export class GameApp {
       return null;
     }
     if (result.linesCleared > 0) {
+      nativeHaptic(result.linesCleared >= 2 ? 'big-clear' : 'clear');
       this.audio.clear(result.linesCleared, g.state.streak);
       this.audio.cheer(result.linesCleared);
       this.celebrate(result.linesCleared, g.state.streak);
@@ -411,9 +419,11 @@ export class GameApp {
         0xffffff,
       );
     } else {
+      nativeHaptic('place');
       this.audio.place();
     }
     if (result.perfectClear) {
+      nativeHaptic('perfect');
       this.audio.perfectClear();
       this.audio.say('Perfect clear!');
       this.hud.toast('✨ Perfect Clear! +300');
@@ -483,6 +493,7 @@ export class GameApp {
   private finishGame(): void {
     const g = this.game!;
     g.state.over = true;
+    nativeHaptic('game-over');
     this.audio.gameOver();
     if (g.state.mode !== 'zen') storage.setHighScore(g.state.mode, g.state.score);
     storage.clearSavedGame(g.state.mode);
