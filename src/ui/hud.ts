@@ -28,6 +28,11 @@ const CSS = `
   .gl-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--gl-shadow); }
   .gl-timer { position: absolute; top: 0; left: 0; height: 5px; background: linear-gradient(90deg, var(--gl-coral), var(--gl-amber)); border-radius: 0 3px 3px 0; transition: width 0.2s linear; box-shadow: 0 0 12px rgba(255,120,73,0.7); }
 
+  /* landscape: HUD collapses into a top-left column so the board owns the full height */
+  .gl-hud.landscape .gl-top { flex-direction: column; align-items: flex-start; gap: 10px; right: auto; }
+  .gl-hud.landscape .gl-score-wrap { text-align: left; }
+  .gl-hud.landscape .gl-flame { text-align: left; min-width: 0; }
+
   /* ---------- power-up dock ---------- */
   .gl-powerups { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); left: 0; right: 0; display: flex; justify-content: center; gap: 11px; }
   .gl-pu { pointer-events: auto; position: relative; font-family: inherit; background: var(--gl-panel); border: 1px solid var(--gl-edge);
@@ -49,7 +54,21 @@ const CSS = `
       repeating-linear-gradient(0deg, transparent 0 35px, rgba(255,255,255,0.022) 35px 36px),
       repeating-linear-gradient(90deg, transparent 0 35px, rgba(255,255,255,0.022) 35px 36px),
       rgba(9, 11, 18, 0.94);
-    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); overflow-y: auto; }
+  .gl-overlay > * { flex-shrink: 0; }
+  /* short landscape screens: compact menu, anchored to the top and scrollable
+     (centered flex + overflow clips both ends — never center an overflowing column) */
+  @media (orientation: landscape) and (max-height: 520px) {
+    #gl-overlay-menu { justify-content: flex-start; gap: 9px; padding: 14px 24px 24px; }
+    .gl-logo { gap: 4px; margin-bottom: 0; }
+    .gl-logo .row { gap: 4px; }
+    .gl-logo .row:last-child { transform: translateX(10px); }
+    .gl-logo .tile { width: 30px; height: 30px; font-size: 17px; border-radius: 8px; }
+    .gl-tagline { display: none; }
+    .gl-overlay .gl-btn { padding: 9px 16px; font-size: 15px; }
+    .gl-overlay .gl-btn.primary > b { font-size: 14px; }
+    .gl-mode-desc { font-size: 11px; }
+  }
   .gl-overlay h2 { font-family: 'Bungee', sans-serif; font-size: 24px; font-weight: 400; margin: 0; letter-spacing: 1px; }
   .gl-overlay pre { font-size: 13px; line-height: 1.15; margin: 0; }
 
@@ -353,6 +372,10 @@ export class Hud {
       btn.disabled = used[k] || inv[k] <= 0;
       btn.classList.toggle('armed', armed === k);
     }
+  }
+
+  setLandscape(on: boolean): void {
+    this.root.classList.toggle('landscape', on);
   }
 
   /** Portrait: dock centered at the bottom (CSS default). Landscape: vertical column at (x, y). */

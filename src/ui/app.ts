@@ -221,14 +221,17 @@ export class GameApp {
     // inset pushes it well below a hardcoded offset, overlapping the board.
     const topBar = this.hud.topBarBottom() + 12;
 
+    this.hud.setLandscape(w > h);
     if (w > h) {
-      // landscape: [power-up column] [board] [tray column], board fills the height
+      // landscape: score/menu collapse into a left column; the board owns the
+      // full height with the power-up dock and tray flanking it
       const dockW = 58;
-      const size = Math.min(h - topBar - 20, w * 0.55, 520);
+      const hudReserve = 150; // left column with ☰/?, score, flame
+      const size = Math.min(h - 24, (w - hudReserve - dockW - 24 - 28 - 20) * 0.75, 520);
       const trayW = size / 3;
-      const totalW = dockW + 24 + size + 28 + trayW;
-      const x0 = (w - totalW) / 2;
-      const boardY = topBar + (h - topBar - size - 12) / 2;
+      const groupW = dockW + 24 + size + 28 + trayW;
+      const x0 = hudReserve + (w - hudReserve - groupW) / 2;
+      const boardY = (h - size) / 2;
       this.boardOrigin = { x: x0 + dockW + 24, y: boardY };
       this.trayOrigin = { x: this.boardOrigin.x + size + 28, y: boardY };
       this.board.container.position.set(this.boardOrigin.x, this.boardOrigin.y);
