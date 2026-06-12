@@ -138,6 +138,33 @@ test('zen mode never shows game over controls during play', async ({ page }) => 
   expect(over).toBe(false);
 });
 
+test('iOS browser visitors get a dismissible add-to-home-screen hint', async ({ browser }) => {
+  const ctx = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    viewport: { width: 430, height: 932 },
+    hasTouch: true,
+  });
+  const page = await ctx.newPage();
+  await page.goto('http://localhost:5180/');
+  const hint = page.locator('#gl-install');
+  await expect(hint).toBeVisible();
+  await expect(hint).toContainText('Add to Home Screen');
+  await page.click('#gl-install-close');
+  await expect(hint).toBeHidden();
+  // dismissal persists across reloads
+  await page.reload();
+  await page.waitForSelector('.gl-logo');
+  await expect(hint).toBeHidden();
+  await ctx.close();
+});
+
+test('non-iOS browsers never see the install hint', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('.gl-logo');
+  await expect(page.locator('#gl-install')).toBeHidden();
+});
+
 test('document root background tracks overlays (iOS standalone bottom strip)', async ({ page }) => {
   await page.goto('/');
   // menu open → root painted overlay-dark

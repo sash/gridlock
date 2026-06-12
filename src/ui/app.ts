@@ -81,6 +81,17 @@ export class GameApp {
       this.inventory = storage.getInventory();
     }
 
+    // iOS in the browser (not installed): nudge toward Add to Home Screen
+    const isIOS =
+      /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const standalone =
+      window.matchMedia('(display-mode: standalone)').matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true;
+    if (isIOS && !standalone && !storage.isInstallHintDismissed()) {
+      this.hud.showInstallHint(() => storage.dismissInstallHint());
+    }
+
     const canvas = app.canvas as HTMLCanvasElement;
     canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
     window.addEventListener('pointermove', (e) => this.onPointerMove(e));

@@ -111,6 +111,17 @@ const CSS = `
     75% { opacity: 1; transform: scale(1) translateY(0); }
     100% { opacity: 0; transform: scale(1) translateY(-26px); }
   }
+  /* add-to-home-screen hint (iOS Safari, browser mode only) */
+  .gl-install { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+    width: min(340px, 88vw); background: var(--gl-panel); border: 1px solid var(--gl-edge); border-radius: 16px;
+    padding: 12px 14px; display: flex; gap: 10px; align-items: center; pointer-events: auto; z-index: 6;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45); font-size: 13px; font-weight: 600; line-height: 1.45; text-align: left;
+    animation: gl-install-in 0.45s cubic-bezier(0.2, 1.4, 0.4, 1) 1.2s backwards; }
+  .gl-install .icon { font-size: 22px; }
+  .gl-install b { color: var(--gl-amber); }
+  .gl-install .close { flex: none; pointer-events: auto; background: rgba(128,128,128,0.18); border: none; border-radius: 10px;
+    width: 30px; height: 30px; font-size: 14px; font-weight: 800; color: inherit; }
+  @keyframes gl-install-in { from { opacity: 0; transform: translateX(-50%) translateY(24px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
   .hidden { display: none !important; }
 `;
 
@@ -169,6 +180,11 @@ export class Hud {
               `<button class="gl-pu" data-pu="${k}" aria-label="${k}" title="${PU_INFO[k].desc}">${PU_ICONS[k]}<span class="pu-name">${PU_INFO[k].name}</span><span class="count" data-count="${k}">0</span></button>`,
           )
           .join('')}
+      </div>
+      <div class="gl-install hidden" id="gl-install">
+        <span class="icon">📲</span>
+        <span>Get the full-screen experience: tap <b>Share</b> <span style="opacity:.8">(the square with the arrow)</span> then <b>Add to Home Screen</b>.</span>
+        <button class="close" id="gl-install-close" aria-label="Dismiss">✕</button>
       </div>
       <div class="gl-glow" id="gl-glow"></div>
       <div class="gl-cheer" id="gl-cheer"></div>
@@ -351,6 +367,20 @@ export class Hud {
   showHelp(): void {
     this.el('gl-overlay-help').classList.remove('hidden');
     this.paintRoot();
+  }
+
+  /** iOS-browser-only nudge to install the PWA. */
+  showInstallHint(onDismiss: () => void): void {
+    const hint = this.el('gl-install');
+    hint.classList.remove('hidden');
+    this.el('gl-install-close').addEventListener(
+      'click',
+      () => {
+        hint.classList.add('hidden');
+        onDismiss();
+      },
+      { once: true },
+    );
   }
 
   /** Bottom edge of the top HUD bar in CSS px — the board must start below it. */

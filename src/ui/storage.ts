@@ -85,6 +85,16 @@ export function setDailyResult(key: string, score: number, card: string): void {
   write(`daily.${key}`, { score, card });
 }
 
+// --- add-to-home-screen hint (iOS browser only) ---
+
+export function isInstallHintDismissed(): boolean {
+  return read<boolean>('installHintDismissed') ?? false;
+}
+
+export function dismissInstallHint(): void {
+  write('installHintDismissed', true);
+}
+
 // --- cosmetic theme ---
 
 export function getThemeId(): string | null {
