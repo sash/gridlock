@@ -58,7 +58,7 @@ export class GameApp {
   private boardOrigin = { x: 0, y: 0 };
   private trayOrigin = { x: 0, y: 0 };
 
-  constructor(app: Application) {
+  constructor(private app: Application) {
     this.theme = getTheme(storage.getThemeId());
     this.stage = app.stage;
     this.board = new BoardView(this.theme);
@@ -175,6 +175,8 @@ export class GameApp {
   private setTheme(id: string): void {
     storage.setThemeId(id);
     this.theme = getTheme(id);
+    // the canvas covers the page — its clear color must follow the theme too
+    this.app.renderer.background.color = this.theme.background;
     this.board.setTheme(this.theme);
     this.tray.setTheme(this.theme);
     this.hud.applyTheme(this.theme);

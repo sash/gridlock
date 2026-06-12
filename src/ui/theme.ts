@@ -36,11 +36,11 @@ export const THEMES: Theme[] = [
   {
     id: 'neon',
     label: 'Neon',
-    background: 0x070a12,
-    boardBg: 0x0d1322,
-    gridLine: 0x1b2540,
-    emptyCell: 0x111a2e,
-    text: 0xd8fdff,
+    background: 0x0c0218, // deep violet-black — clearly distinct from Night's blue
+    boardBg: 0x190b33,
+    gridLine: 0x321b66,
+    emptyCell: 0x221045,
+    text: 0xe9d5ff,
     colors: [0xfff95b, 0x00f5ff, 0x3d9bff, 0xbf5bff, 0xff4fd8, 0x39ff88, 0xff9e3d, 0xff3d6e],
   },
 ];
