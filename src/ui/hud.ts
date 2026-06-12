@@ -40,7 +40,8 @@ const CSS = `
   .gl-pu .count { position: absolute; top: -6px; right: -6px; background: var(--gl-amber); color: #1d1500; font-size: 11px; font-weight: 800; border-radius: 9px; min-width: 18px; height: 18px; line-height: 18px; box-shadow: 0 2px 0 rgba(0,0,0,0.35); }
 
   /* ---------- overlays ---------- */
-  .gl-overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px;
+  .gl-overlay { position: fixed; inset: 0; height: 100vh; height: 100lvh; /* iOS standalone: span the full screen, not the shortened layout viewport */
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px;
     color: #f2f5ff; pointer-events: auto; padding: 24px; text-align: center;
     background:
       radial-gradient(110% 60% at 50% -5%, rgba(72,149,239,0.16), transparent 60%),
@@ -94,7 +95,7 @@ const CSS = `
   .gl-themes .gl-btn.active { outline: 2px solid var(--gl-amber); }
 
   /* ---------- feedback ---------- */
-  .gl-glow { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s; box-shadow: inset 0 0 70px 14px var(--gl-coral); }
+  .gl-glow { position: fixed; inset: 0; height: 100vh; height: 100lvh; pointer-events: none; opacity: 0; transition: opacity 0.5s; box-shadow: inset 0 0 70px 14px var(--gl-coral); }
   .gl-toast { position: fixed; top: 17%; left: 50%; transform: translateX(-50%); background: rgba(17,21,32,0.95); color: #f2f5ff;
     border: 1px solid var(--gl-edge); border-left: 4px solid var(--gl-amber);
     padding: 11px 18px; border-radius: 14px; font-weight: 700; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
