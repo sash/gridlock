@@ -94,7 +94,9 @@ export class GameApp {
       (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||
-      (navigator as unknown as { standalone?: boolean }).standalone === true;
+      (navigator as unknown as { standalone?: boolean }).standalone === true ||
+      // the React Native shell is already an installed app
+      typeof (window as { ReactNativeWebView?: unknown }).ReactNativeWebView !== 'undefined';
     if (isIOS && !standalone && !storage.isInstallHintDismissed()) {
       this.hud.showInstallHint(() => storage.dismissInstallHint());
     }
