@@ -17,11 +17,18 @@ async function boot(): Promise<void> {
     window.matchMedia('(display-mode: standalone)').matches ||
     (navigator as unknown as { standalone?: boolean }).standalone === true;
   if (standalone) {
-    const setScreenH = () =>
+    const setScreenH = () => {
+      // screen.width/height stay portrait-oriented on iOS even when rotated —
+      // pick the physical dimension that is currently vertical
+      const physical =
+        window.innerWidth > window.innerHeight
+          ? Math.min(screen.width, screen.height)
+          : Math.max(screen.width, screen.height);
       document.documentElement.style.setProperty(
         '--gl-screen-h',
-        `${Math.max(screen.height, window.innerHeight)}px`,
+        `${Math.max(physical, window.innerHeight)}px`,
       );
+    };
     setScreenH();
     window.addEventListener('resize', setScreenH);
   }
