@@ -222,21 +222,25 @@ export class GameApp {
     const topBar = this.hud.topBarBottom() + 12;
 
     if (w > h) {
-      // landscape: board sized by height, tray as a vertical column beside it
-      const size = Math.min(h - topBar - 88, w * 0.5, 520);
-      const trayLen = size; // 3 stacked slots, each size/3 tall
+      // landscape: [power-up column] [board] [tray column], board fills the height
+      const dockW = 58;
+      const size = Math.min(h - topBar - 20, w * 0.55, 520);
       const trayW = size / 3;
-      const totalW = size + 28 + trayW;
+      const totalW = dockW + 24 + size + 28 + trayW;
       const x0 = (w - totalW) / 2;
-      this.boardOrigin = { x: x0, y: topBar };
-      this.trayOrigin = { x: x0 + size + 28, y: topBar };
+      const boardY = topBar + (h - topBar - size - 12) / 2;
+      this.boardOrigin = { x: x0 + dockW + 24, y: boardY };
+      this.trayOrigin = { x: this.boardOrigin.x + size + 28, y: boardY };
       this.board.container.position.set(this.boardOrigin.x, this.boardOrigin.y);
       this.board.resize(size);
       this.tray.container.position.set(this.trayOrigin.x, this.trayOrigin.y);
-      this.tray.resize(trayLen, true);
+      this.tray.resize(size, true);
+      const dockH = 4 * 58 + 3 * 11;
+      this.hud.positionDock('side', x0, boardY + (size - dockH) / 2);
       this.refresh();
       return;
     }
+    this.hud.positionDock('bottom');
 
     const trayH = Math.min(w, 520) / 3 * 0.9;
     const size = Math.min(w - 28, h - topBar - trayH - 110, 520);

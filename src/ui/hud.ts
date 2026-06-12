@@ -355,6 +355,20 @@ export class Hud {
     }
   }
 
+  /** Portrait: dock centered at the bottom (CSS default). Landscape: vertical column at (x, y). */
+  positionDock(mode: 'bottom' | 'side', x = 0, y = 0): void {
+    const dock = this.el('gl-powerups');
+    if (mode === 'bottom') {
+      dock.style.cssText = '';
+      return;
+    }
+    dock.style.left = `${x}px`;
+    dock.style.top = `${y}px`;
+    dock.style.right = 'auto';
+    dock.style.bottom = 'auto';
+    dock.style.flexDirection = 'column';
+  }
+
   showMenu(restartLabel: string | null = null): void {
     this.el('gl-overlay-menu').classList.remove('hidden');
     this.el('gl-overlay-over').classList.add('hidden');
