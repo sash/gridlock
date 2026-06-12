@@ -56,6 +56,28 @@ export class GameAudio {
     }
   }
 
+  /** Celebration jingle on line clears — bigger clears get a longer arpeggio. */
+  cheer(lines: number): void {
+    const scale = [523, 587, 659, 784, 880, 1047]; // C major-ish ladder
+    const notes = Math.min(2 + lines, 6);
+    for (let i = 0; i < notes; i++) {
+      this.tone(scale[i], 0.16, 'triangle', 0.06 + i * 0.07, 0.7);
+    }
+    if (lines >= 3) this.tone(1319, 0.4, 'triangle', 0.06 + notes * 0.07, 0.8); // sparkle on top
+  }
+
+  /** Speak the celebration word out loud (Web Speech API — built-in voices, offline). */
+  say(text: string): void {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    synth.cancel(); // a fresh cheer interrupts a still-running one
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1.15;
+    utter.pitch = 1.3; // upbeat
+    utter.volume = 0.9;
+    synth.speak(utter);
+  }
+
   perfectClear(): void {
     const notes = [523, 659, 784, 1047]; // C E G C — fanfare
     notes.forEach((f, i) => this.tone(f, 0.3, 'triangle', i * 0.09, 0.9));

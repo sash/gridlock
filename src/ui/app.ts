@@ -22,6 +22,16 @@ const SPECIAL_INTROS: Array<[number, string]> = [
   [CELL.WILD, '🌈 Wild earned! It completes both its row and column'],
 ];
 
+/** Shown when the player taps a special brick on the board. */
+const SPECIAL_TAP_INFO: Record<number, string> = {
+  [CELL.GEM]: '💎 Gem — clear its row or column for +150 points',
+  [CELL.ICE]: '🧊 Ice — needs two clears: first cracks it, second removes it',
+  [CELL.CRACKED]: '🧊 Cracked ice — one more clear removes it',
+  [CELL.BOMB]: '💣 Bomb — clear its line before the counter reaches 0 to blast a 3×3 area; too late and it turns to stone',
+  [CELL.STONE]: '🪨 Stone — can’t be cleared; it crumbles on its own after 15 placements',
+  [CELL.WILD]: '🌈 Wild — counts as filled for both its row and its column',
+};
+
 interface DragState {
   slot: number;
   pieceId: string;
@@ -156,7 +166,10 @@ export class GameApp {
   private toMenu(): void {
     this.persist();
     this.cancelDrag();
-    this.hud.showMenu();
+    const g = this.game;
+    // Daily is one attempt per day — no mid-game restart there
+    const canRestart = !!g && !g.state.over && g.state.mode !== 'daily';
+    this.hud.showMenu(canRestart ? `🔁 New game (${g!.state.mode})` : null);
   }
 
   private setTheme(id: string): void {
@@ -180,7 +193,9 @@ export class GameApp {
     // can be stale here, and CSS pixels are the space pointer events live in.
     const w = window.innerWidth;
     const h = window.innerHeight;
-    const topBar = 86;
+    // Measure the real HUD bar: in standalone PWA mode on iPhone the safe-area
+    // inset pushes it well below a hardcoded offset, overlapping the board.
+    const topBar = this.hud.topBarBottom() + 12;
     const trayH = Math.min(w, 520) / 3 * 0.9;
     const size = Math.min(w - 28, h - topBar - trayH - 110, 520);
     this.boardOrigin = { x: (w - size) / 2, y: topBar };
@@ -255,7 +270,20 @@ export class GameApp {
     const tx = e.clientX - this.trayOrigin.x;
     const ty = e.clientY - this.trayOrigin.y;
     const slot = this.tray.slotAt(tx, ty);
-    if (slot === null || !g.state.tray[slot]) return;
+    if (slot === null || !g.state.tray[slot]) {
+      // tapping a special brick on the board explains what it does
+      const cell = this.cellFromEvent(e);
+      if (cell) {
+        const v = g.state.board[cell.row * BOARD_SIZE + cell.col];
+        let info = SPECIAL_TAP_INFO[v];
+        if (v === CELL.BOMB) {
+          const fuse = g.state.aux.bombs[cell.row * BOARD_SIZE + cell.col];
+          if (fuse !== undefined) info = `💣 Bomb — ${fuse} placement${fuse === 1 ? '' : 's'} left to clear its line, or it turns to stone`;
+        }
+        if (info) this.hud.toast(info, 3600);
+      }
+      return;
+    }
 
     if (this.armed === 'rotate') {
       this.useArmedRotate(slot);
@@ -341,6 +369,8 @@ export class GameApp {
     }
     if (result.linesCleared > 0) {
       this.audio.clear(result.linesCleared, g.state.streak);
+      this.audio.cheer(result.linesCleared);
+      this.celebrate(result.linesCleared, g.state.streak);
       this.particles.burst(
         [...result.clearedCells, ...result.explodedCells],
         result.lines,
@@ -352,6 +382,7 @@ export class GameApp {
     }
     if (result.perfectClear) {
       this.audio.perfectClear();
+      this.audio.say('Perfect clear!');
       this.hud.toast('✨ Perfect Clear! +300');
     }
     for (const kind of result.earned) {
@@ -366,6 +397,20 @@ export class GameApp {
     this.introduceSpecials();
     if (result.gameOver) this.finishGame();
     return result;
+  }
+
+  /** Big on-screen praise scaled to the size of the clear — shown and spoken. */
+  private celebrate(lines: number, streak: number): void {
+    const byLines: Array<[string, string, string]> = [
+      ['Nice!', 'Nice!', '#7ee787'],
+      ['Great! Double clear!', 'Great! Double clear!', '#4cc9f0'],
+      ['Amazing! Triple!', 'Amazing! Triple clear!', '#bf5bff'],
+      ['INCREDIBLE!', 'Incredible!', '#ffd166'],
+    ];
+    const [text, spoken, color] = byLines[Math.min(lines, 4) - 1];
+    const sub = streak >= 2 ? `🔥 streak ×${streakMultiplier(streak)}` : '';
+    this.hud.cheer(text, sub, color);
+    this.audio.say(spoken);
   }
 
   /** One-time explainer toast when a special cell type shows up for the first time. */

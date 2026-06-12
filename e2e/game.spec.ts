@@ -137,6 +137,45 @@ test('zen mode never shows game over controls during play', async ({ page }) => 
   expect(over).toBe(false);
 });
 
+test('clearing a line shows a celebration cheer', async ({ page }) => {
+  await startClassic(page);
+  await page.evaluate(() => {
+    const g = window.__game!.game!;
+    for (let c = 0; c < 7; c++) g.state.board[c] = 1; // row 0 missing only (7,0)
+    g.state.board[15] = 1; // keep col 7 from being empty → no perfect clear
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    window.__game!.placeAt(0, 7, 0);
+  });
+  await expect(page.locator('#gl-cheer')).toContainText('Nice!');
+});
+
+test('tapping a special brick explains it; menu offers New game mid-game', async ({ page }) => {
+  await startClassic(page);
+  // score some points, then plant a gem and tap it
+  await page.evaluate(() => {
+    const g = window.__game!.game!;
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    window.__game!.placeAt(0, 4, 4);
+    g.state.board[0] = 16; // CELL.GEM at (0,0)
+  });
+  const origin = await page.evaluate(() => {
+    const app = window.__game! as unknown as { boardOrigin: { x: number; y: number }; board: { cellSize: number } };
+    return { x: app.boardOrigin.x, y: app.boardOrigin.y, cs: app.board.cellSize };
+  });
+  await page.mouse.click(origin.x + origin.cs / 2, origin.y + origin.cs / 2);
+  await expect(page.locator('#gl-toast')).toContainText('Gem');
+  // ☰ menu mid-game offers New game
+  await page.click('#gl-menu-btn');
+  const newGame = page.locator('#gl-newgame-btn');
+  await expect(newGame).toBeVisible();
+  await expect(newGame).toContainText('New game');
+  const scoreBefore = await page.evaluate(() => window.__game!.game!.state.score);
+  await newGame.click();
+  await page.waitForFunction(() => window.__game!.game!.state.score === 0);
+  void scoreBefore;
+  await expect(page.locator('#gl-overlay-menu')).toBeHidden();
+});
+
 test('power-up swap replaces the tray once', async ({ page }) => {
   await startClassic(page);
   const before = await page.evaluate(() => window.__game!.game!.state.tray);

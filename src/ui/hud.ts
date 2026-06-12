@@ -8,7 +8,7 @@ const CSS = `
   .gl-score-wrap { text-align: center; }
   .gl-score { font-size: 30px; font-weight: 800; line-height: 1; }
   .gl-high { font-size: 12px; opacity: 0.6; }
-  .gl-flame { font-size: 16px; font-weight: 700; min-width: 64px; text-align: right; transition: opacity 0.4s; }
+  .gl-flame { font-size: 16px; font-weight: 700; min-width: 64px; text-align: right; transition: opacity 0.4s; pointer-events: auto; }
   .gl-btn { pointer-events: auto; background: rgba(128,128,128,0.18); color: inherit; border: none; border-radius: 10px; padding: 8px 12px; font-size: 15px; font-weight: 600; }
   .gl-btn:active { transform: scale(0.96); }
   .gl-timer { position: absolute; top: 0; left: 0; height: 4px; background: #ff7849; transition: width 0.2s linear; }
@@ -34,7 +34,17 @@ const CSS = `
   .gl-themes .gl-btn { min-width: 0; }
   .gl-themes .gl-btn.active { outline: 2px solid #ffd166; }
   .gl-glow { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s; box-shadow: inset 0 0 60px 12px #ff7849; }
-  .gl-toast { position: fixed; top: 18%; left: 50%; transform: translateX(-50%); background: rgba(20,24,34,0.92); color: #fff; padding: 10px 18px; border-radius: 12px; font-weight: 700; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .gl-toast { position: fixed; top: 18%; left: 50%; transform: translateX(-50%); background: rgba(20,24,34,0.92); color: #fff; padding: 10px 18px; border-radius: 12px; font-weight: 700; opacity: 0; transition: opacity 0.3s; pointer-events: none; max-width: 80vw; text-align: center; z-index: 5; }
+  .gl-cheer { position: fixed; top: 26%; left: 0; right: 0; text-align: center; font-size: 40px; font-weight: 900; letter-spacing: 1px; pointer-events: none; opacity: 0; text-shadow: 0 2px 18px rgba(0,0,0,0.5); }
+  .gl-cheer .sub { display: block; font-size: 17px; font-weight: 700; opacity: 0.85; margin-top: 2px; }
+  .gl-cheer.pop { animation: gl-cheer-pop 1.1s ease-out; }
+  @keyframes gl-cheer-pop {
+    0% { opacity: 0; transform: scale(0.5); }
+    18% { opacity: 1; transform: scale(1.12); }
+    30% { transform: scale(1); }
+    75% { opacity: 1; transform: scale(1) translateY(0); }
+    100% { opacity: 0; transform: scale(1) translateY(-26px); }
+  }
   .hidden { display: none !important; }
 `;
 
@@ -93,6 +103,7 @@ export class Hud {
           .join('')}
       </div>
       <div class="gl-glow" id="gl-glow"></div>
+      <div class="gl-cheer" id="gl-cheer"></div>
       <div class="gl-toast" id="gl-toast"></div>
       <div class="gl-overlay" id="gl-overlay-menu">
         <h1>GridLock</h1>
@@ -100,6 +111,7 @@ export class Hud {
           (m) =>
             `<button class="gl-btn primary" data-mode="${m.mode}">${m.label}<span class="gl-mode-desc">${m.desc}</span></button>`,
         ).join('')}
+        <button class="gl-btn hidden" id="gl-newgame-btn">🔁 New game</button>
         <button class="gl-btn" id="gl-help-btn-menu">❓ How to play</button>
         <div class="gl-themes" id="gl-themes">
           ${THEMES.map((t) => `<button class="gl-btn" data-theme="${t.id}">${t.label}</button>`).join('')}
@@ -150,6 +162,12 @@ export class Hud {
     parent.appendChild(this.root);
 
     this.el('gl-menu-btn').addEventListener('click', () => cb.onMenu());
+    this.el('gl-newgame-btn').addEventListener('click', () => cb.onRestart());
+    this.el('gl-flame').addEventListener('click', () => {
+      if (this.el('gl-flame').textContent) {
+        this.toast('🔥 Streak: clear lines back-to-back to multiply line points, up to ×5. It survives one miss — the dim flame is your warning.', 3600);
+      }
+    });
     this.el('gl-help-btn-game').addEventListener('click', () => this.showHelp());
     this.el('gl-help-btn-menu').addEventListener('click', () => this.showHelp());
     this.el('gl-help-close').addEventListener('click', () =>
@@ -216,13 +234,21 @@ export class Hud {
     }
   }
 
-  showMenu(): void {
+  showMenu(restartLabel: string | null = null): void {
     this.el('gl-overlay-menu').classList.remove('hidden');
     this.el('gl-overlay-over').classList.add('hidden');
+    const btn = this.el('gl-newgame-btn');
+    btn.classList.toggle('hidden', restartLabel === null);
+    if (restartLabel !== null) btn.textContent = restartLabel;
   }
 
   showHelp(): void {
     this.el('gl-overlay-help').classList.remove('hidden');
+  }
+
+  /** Bottom edge of the top HUD bar in CSS px — the board must start below it. */
+  topBarBottom(): number {
+    return this.root.querySelector('.gl-top')!.getBoundingClientRect().bottom;
   }
 
   hideOverlays(): void {
@@ -239,6 +265,16 @@ export class Hud {
     this.el('gl-over-card').textContent = opts.card ?? '';
     this.el('gl-share-btn').classList.toggle('hidden', !opts.shareable);
     this.el('gl-again-btn').classList.toggle('hidden', !opts.canRestart);
+  }
+
+  /** Big animated celebration text over the board (clears, combos). */
+  cheer(text: string, sub: string, color: string): void {
+    const el = this.el('gl-cheer');
+    el.innerHTML = `${text}${sub ? `<span class="sub">${sub}</span>` : ''}`;
+    el.style.color = color;
+    el.classList.remove('pop');
+    void el.offsetWidth; // restart the CSS animation
+    el.classList.add('pop');
   }
 
   toast(message: string, durationMs = 1600): void {
