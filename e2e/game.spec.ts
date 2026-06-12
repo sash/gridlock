@@ -138,6 +138,24 @@ test('zen mode never shows game over controls during play', async ({ page }) => 
   expect(over).toBe(false);
 });
 
+test('document root background tracks overlays (iOS standalone bottom strip)', async ({ page }) => {
+  await page.goto('/');
+  // menu open → root painted overlay-dark
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.style.background))
+    .toContain('rgb(9, 11, 18)');
+  await page.click('[data-mode="classic"]');
+  await page.waitForFunction(() => window.__game?.game?.state.mode === 'classic');
+  // in-game → root painted with the theme background
+  const inGame = await page.evaluate(() => document.documentElement.style.background);
+  expect(inGame).not.toContain('rgb(9, 11, 18)');
+  // help overlay → dark again
+  await page.click('#gl-help-btn-game');
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.style.background))
+    .toContain('rgb(9, 11, 18)');
+});
+
 test('streak edge glow turns off when the streak dies', async ({ page }) => {
   await startClassic(page);
   await page.evaluate(() => {

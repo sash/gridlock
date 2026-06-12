@@ -139,6 +139,8 @@ export interface HudCallbacks {
 
 export class Hud {
   private root: HTMLElement;
+  private themeBgCss = '#10131a';
+  private glowOn = false;
 
   constructor(parent: HTMLElement, cb: HudCallbacks) {
     const style = document.createElement('style');
@@ -245,9 +247,10 @@ export class Hud {
     });
     this.el('gl-help-btn-game').addEventListener('click', () => this.showHelp());
     this.el('gl-help-btn-menu').addEventListener('click', () => this.showHelp());
-    this.el('gl-help-close').addEventListener('click', () =>
-      this.el('gl-overlay-help').classList.add('hidden'),
-    );
+    this.el('gl-help-close').addEventListener('click', () => {
+      this.el('gl-overlay-help').classList.add('hidden');
+      this.paintRoot();
+    });
     this.el('gl-again-btn').addEventListener('click', () => cb.onRestart());
     this.el('gl-share-btn').addEventListener('click', () => cb.onShare());
     this.el('gl-over-menu-btn').addEventListener('click', () => cb.onMenu());
@@ -266,8 +269,29 @@ export class Hud {
     return this.root.querySelector(`#${id}`)!;
   }
 
+  /**
+   * iOS standalone refuses to paint fixed elements in the strip below the
+   * layout viewport — only the document root's background reaches it. Keep the
+   * root in sync with whatever should cover the full screen right now.
+   */
+  private paintRoot(): void {
+    const anyOverlayOpen = ['gl-overlay-menu', 'gl-overlay-over', 'gl-overlay-help'].some(
+      (id) => !this.el(id).classList.contains('hidden'),
+    );
+    const html = document.documentElement.style;
+    if (anyOverlayOpen) {
+      html.background = '#090b12';
+    } else if (this.glowOn) {
+      html.background = `linear-gradient(180deg, ${this.themeBgCss} 55%, #ff7849 170%)`;
+    } else {
+      html.background = this.themeBgCss;
+    }
+  }
+
   applyTheme(theme: Theme): void {
-    document.body.style.background = `#${theme.background.toString(16).padStart(6, '0')}`;
+    this.themeBgCss = `#${theme.background.toString(16).padStart(6, '0')}`;
+    document.body.style.background = this.themeBgCss;
+    this.paintRoot();
     this.root.style.setProperty('--gl-text', `#${theme.text.toString(16).padStart(6, '0')}`);
     this.root.style.setProperty('--gl-theme-panel', theme.panelCss);
     this.root.style.setProperty('--gl-theme-edge', theme.edgeCss);
@@ -286,7 +310,9 @@ export class Hud {
   setStreak(streak: number, grace: boolean, multiplier: number): void {
     const flame = this.el('gl-flame');
     // glow strictly tracks the live multiplier — it must die with the streak
-    this.el('gl-glow').style.opacity = streak > 0 && multiplier >= 2.5 ? '1' : '0';
+    this.glowOn = streak > 0 && multiplier >= 2.5;
+    this.el('gl-glow').style.opacity = this.glowOn ? '1' : '0';
+    this.paintRoot();
     if (streak <= 0) {
       flame.textContent = '';
       return;
@@ -319,10 +345,12 @@ export class Hud {
     const btn = this.el('gl-newgame-btn');
     btn.classList.toggle('hidden', restartLabel === null);
     if (restartLabel !== null) btn.textContent = restartLabel;
+    this.paintRoot();
   }
 
   showHelp(): void {
     this.el('gl-overlay-help').classList.remove('hidden');
+    this.paintRoot();
   }
 
   /** Bottom edge of the top HUD bar in CSS px — the board must start below it. */
@@ -334,6 +362,7 @@ export class Hud {
     this.el('gl-overlay-menu').classList.add('hidden');
     this.el('gl-overlay-over').classList.add('hidden');
     this.el('gl-overlay-help').classList.add('hidden');
+    this.paintRoot();
   }
 
   showGameOver(opts: { title: string; score: number; high: number; card?: string; shareable: boolean; canRestart: boolean }): void {
@@ -344,6 +373,7 @@ export class Hud {
     this.el('gl-over-card').textContent = opts.card ?? '';
     this.el('gl-share-btn').classList.toggle('hidden', !opts.shareable);
     this.el('gl-again-btn').classList.toggle('hidden', !opts.canRestart);
+    this.paintRoot();
   }
 
   /** Big animated celebration text over the board (clears, combos). */
