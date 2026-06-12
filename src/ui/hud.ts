@@ -8,12 +8,15 @@ const CSS = `
     --gl-mint: #00bb88; --gl-violet: #9b5de5; --gl-pink: #f15bb5; --gl-blue: #4895ef;
     --gl-ink: #0b0e16; --gl-panel: #151a26; --gl-edge: rgba(255,255,255,0.07);
   }
-  .gl-hud { position: fixed; inset: 0; pointer-events: none; font-family: 'Quicksand', -apple-system, system-ui, sans-serif; color: var(--gl-text); }
+  .gl-hud { position: fixed; inset: 0; pointer-events: none; font-family: 'Quicksand', -apple-system, system-ui, sans-serif; color: var(--gl-text);
+    --gl-panel: var(--gl-theme-panel, #151a26); --gl-edge: var(--gl-theme-edge, rgba(255,255,255,0.07)); --gl-shadow: var(--gl-theme-shadow, rgba(0,0,0,0.4)); }
+  /* overlays keep the dark Night-Arcade identity in every theme (their text is fixed light) */
+  .gl-overlay { --gl-panel: #151a26; --gl-edge: rgba(255,255,255,0.07); --gl-shadow: rgba(0,0,0,0.4); }
 
   /* ---------- top bar ---------- */
   .gl-top { position: absolute; top: env(safe-area-inset-top, 0); left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; }
   .gl-score-wrap { text-align: center; }
-  .gl-score { font-family: 'Bungee', 'Quicksand', sans-serif; font-size: 28px; line-height: 1; letter-spacing: 1px; text-shadow: 0 3px 0 rgba(0,0,0,0.35); }
+  .gl-score { font-family: 'Bungee', 'Quicksand', sans-serif; font-size: 28px; line-height: 1; letter-spacing: 1px; text-shadow: 0 3px 0 var(--gl-shadow); }
   .gl-high { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; opacity: 0.55; margin-top: 3px; }
   .gl-flame { font-size: 14px; font-weight: 700; min-width: 64px; text-align: center; transition: opacity 0.4s; pointer-events: auto;
     background: linear-gradient(180deg, rgba(255,120,73,0.22), rgba(255,209,102,0.12)); border: 1px solid rgba(255,150,80,0.35);
@@ -21,18 +24,18 @@ const CSS = `
   .gl-flame:empty { background: none; border-color: transparent; }
   .gl-btn { pointer-events: auto; font-family: inherit; background: var(--gl-panel); color: inherit; border: 1px solid var(--gl-edge);
     border-radius: 12px; padding: 8px 13px; font-size: 15px; font-weight: 700;
-    box-shadow: 0 3px 0 rgba(0,0,0,0.4); transition: transform 0.06s, box-shadow 0.06s; }
-  .gl-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+    box-shadow: 0 3px 0 var(--gl-shadow); transition: transform 0.06s, box-shadow 0.06s; }
+  .gl-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--gl-shadow); }
   .gl-timer { position: absolute; top: 0; left: 0; height: 5px; background: linear-gradient(90deg, var(--gl-coral), var(--gl-amber)); border-radius: 0 3px 3px 0; transition: width 0.2s linear; box-shadow: 0 0 12px rgba(255,120,73,0.7); }
 
   /* ---------- power-up dock ---------- */
   .gl-powerups { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 10px); left: 0; right: 0; display: flex; justify-content: center; gap: 11px; }
   .gl-pu { pointer-events: auto; position: relative; font-family: inherit; background: var(--gl-panel); border: 1px solid var(--gl-edge);
     border-radius: 14px; width: 58px; height: 58px; font-size: 21px; color: inherit;
-    box-shadow: 0 4px 0 rgba(0,0,0,0.45); transition: transform 0.06s, box-shadow 0.06s; }
-  .gl-pu:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.45); }
+    box-shadow: 0 4px 0 var(--gl-shadow); transition: transform 0.06s, box-shadow 0.06s; }
+  .gl-pu:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--gl-shadow); }
   .gl-pu[disabled] { opacity: 0.32; box-shadow: 0 2px 0 rgba(0,0,0,0.3); }
-  .gl-pu.armed { outline: 2px solid var(--gl-amber); box-shadow: 0 4px 0 rgba(0,0,0,0.45), 0 0 16px rgba(255,209,102,0.45); }
+  .gl-pu.armed { outline: 2px solid var(--gl-amber); box-shadow: 0 4px 0 var(--gl-shadow), 0 0 16px rgba(255,209,102,0.45); }
   .gl-pu .pu-name { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.6px; text-transform: uppercase; opacity: 0.7; margin-top: -1px; }
   .gl-pu .count { position: absolute; top: -6px; right: -6px; background: var(--gl-amber); color: #1d1500; font-size: 11px; font-weight: 800; border-radius: 9px; min-width: 18px; height: 18px; line-height: 18px; box-shadow: 0 2px 0 rgba(0,0,0,0.35); }
 
@@ -265,6 +268,9 @@ export class Hud {
   applyTheme(theme: Theme): void {
     document.body.style.background = `#${theme.background.toString(16).padStart(6, '0')}`;
     this.root.style.setProperty('--gl-text', `#${theme.text.toString(16).padStart(6, '0')}`);
+    this.root.style.setProperty('--gl-theme-panel', theme.panelCss);
+    this.root.style.setProperty('--gl-theme-edge', theme.edgeCss);
+    this.root.style.setProperty('--gl-theme-shadow', theme.shadowCss);
     this.root
       .querySelectorAll<HTMLButtonElement>('[data-theme]')
       .forEach((b) => b.classList.toggle('active', b.dataset.theme === theme.id));
@@ -278,13 +284,14 @@ export class Hud {
   /** Flame meter: shows the multiplier, "cools" (fades) during the grace placement. */
   setStreak(streak: number, grace: boolean, multiplier: number): void {
     const flame = this.el('gl-flame');
+    // glow strictly tracks the live multiplier — it must die with the streak
+    this.el('gl-glow').style.opacity = streak > 0 && multiplier >= 2.5 ? '1' : '0';
     if (streak <= 0) {
       flame.textContent = '';
       return;
     }
     flame.textContent = `🔥 ×${multiplier}`;
     flame.style.opacity = grace ? '0.35' : '1';
-    this.el('gl-glow').style.opacity = multiplier >= 2.5 ? '1' : '0';
   }
 
   setRushTime(secondsLeft: number | null): void {

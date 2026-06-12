@@ -405,16 +405,27 @@ export class GameApp {
 
   /** Big on-screen praise scaled to the size of the clear — shown and spoken. */
   private celebrate(lines: number, streak: number): void {
-    const byLines: Array<[string, string, string]> = [
-      ['Nice!', 'Nice!', '#7ee787'],
-      ['Great! Double clear!', 'Great! Double clear!', '#4cc9f0'],
-      ['Amazing! Triple!', 'Amazing! Triple clear!', '#bf5bff'],
-      ['INCREDIBLE!', 'Incredible!', '#ffd166'],
+    // word buckets escalate with the size of the clear; pick varies per clear
+    const buckets: Array<{ words: string[]; color: string }> = [
+      { words: ['Nice!', 'Good one!', 'Sweet!', 'Clean!', 'Smooth!'], color: '#7ee787' },
+      {
+        words: ['Great! Double clear!', 'Awesome double!', 'Two at once!', 'Slick double!'],
+        color: '#4cc9f0',
+      },
+      {
+        words: ['Amazing! Triple!', 'Spectacular!', 'Triple strike!', 'Masterful!'],
+        color: '#bf5bff',
+      },
+      {
+        words: ['INCREDIBLE!', 'LEGENDARY!', 'UNSTOPPABLE!', 'ABSOLUTELY EPIC!'],
+        color: '#ffd166',
+      },
     ];
-    const [text, spoken, color] = byLines[Math.min(lines, 4) - 1];
+    const bucket = buckets[Math.min(lines, 4) - 1];
+    const text = bucket.words[Math.floor(Math.random() * bucket.words.length)];
     const sub = streak >= 2 ? `🔥 streak ×${streakMultiplier(streak)}` : '';
-    this.hud.cheer(text, sub, color);
-    this.audio.say(spoken);
+    this.hud.cheer(text, sub, bucket.color);
+    this.audio.say(text.replace(/!+/g, '!'));
   }
 
   /** One-time explainer toast when a special cell type shows up for the first time. */

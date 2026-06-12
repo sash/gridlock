@@ -138,6 +138,25 @@ test('zen mode never shows game over controls during play', async ({ page }) => 
   expect(over).toBe(false);
 });
 
+test('streak edge glow turns off when the streak dies', async ({ page }) => {
+  await startClassic(page);
+  await page.evaluate(() => {
+    const g = window.__game!.game!;
+    // hot streak (×2.5) then a clear keeps the glow on
+    g.state.streak = 2;
+    for (let c = 0; c < 7; c++) g.state.board[c] = 1;
+    g.state.board[15] = 1;
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    window.__game!.placeAt(0, 7, 0); // clear → streak 3 → glow on
+  });
+  await expect(page.locator('#gl-glow')).toHaveCSS('opacity', '1');
+  await page.evaluate(() => {
+    window.__game!.placeAt(1, 4, 4); // no clear — grace, streak survives
+    window.__game!.placeAt(2, 6, 6); // no clear — streak dies
+  });
+  await expect(page.locator('#gl-glow')).toHaveCSS('opacity', '0');
+});
+
 test('clearing a line shows a celebration cheer', async ({ page }) => {
   await startClassic(page);
   await page.evaluate(() => {
@@ -147,7 +166,7 @@ test('clearing a line shows a celebration cheer', async ({ page }) => {
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
     window.__game!.placeAt(0, 7, 0);
   });
-  await expect(page.locator('#gl-cheer')).toContainText('Nice!');
+  await expect(page.locator('#gl-cheer')).toContainText(/Nice!|Good one!|Sweet!|Clean!|Smooth!/);
 });
 
 test('tapping a special brick explains it; menu offers New game mid-game', async ({ page }) => {
