@@ -99,6 +99,8 @@ export class GameApp {
     app.ticker.add(() => this.update(app.ticker.deltaMS / 1000));
 
     this.layout();
+    // web fonts change the HUD height when they land — re-measure
+    document.fonts?.ready.then(() => this.layout()).catch(() => undefined);
     this.resumeOrMenu();
   }
 

@@ -15,7 +15,8 @@ test('loads the app with a rendered canvas and menu', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('canvas')).toBeVisible();
   await expect(page.locator('[data-mode="classic"]')).toBeVisible();
-  await expect(page.locator('#gl-overlay-menu h1')).toHaveText('GridLock');
+  await expect(page.locator('#gl-overlay-menu .gl-logo .row').first()).toContainText('GRID');
+  await expect(page.locator('#gl-overlay-menu .gl-logo .row').last()).toContainText('LOCK');
 });
 
 test('menu explains modes and help overlay explains bonuses and power-ups', async ({ page }) => {
