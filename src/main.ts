@@ -24,7 +24,20 @@ async function boot(): Promise<void> {
   window.__game = new GameApp(app);
 
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    void navigator.serviceWorker.register('./sw.js'); // relative: works on subpath hosting
+    // relative path: works on subpath hosting (github.io/gridlock/)
+    const reg = await navigator.serviceWorker.register('./sw.js').catch(() => null);
+    // check for a new build every time the app comes back to the foreground
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void reg?.update();
+    });
+    // when an updated worker takes control, reload once to run the new build
+    // (safe: game state persists to localStorage on every placement)
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloaded) return;
+      reloaded = true;
+      location.reload();
+    });
   }
 }
 
