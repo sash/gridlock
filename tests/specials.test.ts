@@ -120,6 +120,27 @@ describe('explodeBomb', () => {
   });
 });
 
+describe('virgin-cell weighting', () => {
+  test('gems prefer cells never built on (3× weight)', () => {
+    // row 0 empty and never touched; row 1 empty but previously used
+    const touched = new Uint8Array(64);
+    for (let c = 0; c < 8; c++) touched[idx(c, 1)] = 1;
+    let virgin = 0;
+    let used = 0;
+    for (let seed = 0; seed < 400; seed++) {
+      const b = board((_, r) => r >= 2); // rows 0,1 empty
+      const aux = createSpecialsState();
+      spawnOnDeal(b, aux, new Rng(seed), 3, 0, touched);
+      const gem = [...b].findIndex((v) => v === CELL.GEM);
+      if (gem >= 0 && gem < 8) virgin++;
+      else if (gem >= 8 && gem < 16) used++;
+    }
+    // 3:1 weighting → expect roughly 75% on virgin cells
+    expect(virgin / (virgin + used)).toBeGreaterThan(0.6);
+    expect(used).toBeGreaterThan(0); // used cells stay possible, just rarer
+  });
+});
+
 describe('grantWild', () => {
   test('places a wild on a random empty cell', () => {
     const b = board((c) => c < 7);

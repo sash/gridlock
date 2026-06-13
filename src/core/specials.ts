@@ -20,11 +20,24 @@ export function createSpecialsState(): SpecialsState {
   return { bombs: {}, stones: {}, times: {} };
 }
 
-function randomCellWhere(board: Board, rng: Rng, pred: (v: number) => boolean): number {
+/** Cells never built on this game are 3× likelier special spawn spots. */
+const VIRGIN_WEIGHT = 3;
+
+function randomCellWhere(
+  board: Board,
+  rng: Rng,
+  pred: (v: number) => boolean,
+  touched?: Uint8Array | null,
+): number {
   const candidates: number[] = [];
-  for (let i = 0; i < board.length; i++) if (pred(board[i])) candidates.push(i);
+  const weights: number[] = [];
+  for (let i = 0; i < board.length; i++) {
+    if (!pred(board[i])) continue;
+    candidates.push(i);
+    weights.push(touched && !touched[i] ? VIRGIN_WEIGHT : 1);
+  }
   if (candidates.length === 0) return -1;
-  return candidates[rng.int(candidates.length)];
+  return rng.weightedPick(candidates, weights);
 }
 
 /** Spawn gem / ice / bomb at the start of a deal, per spec §5 spawn rules. */
@@ -34,9 +47,10 @@ export function spawnOnDeal(
   rng: Rng,
   dealNumber: number,
   score: number,
+  touched?: Uint8Array | null,
 ): void {
   if (dealNumber > 0 && dealNumber % GEM_EVERY_DEALS === 0) {
-    const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY);
+    const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY, touched);
     if (i >= 0) board[i] = CELL.GEM;
   }
   if (score >= ICE_MIN_SCORE && dealNumber > 0 && dealNumber % ICE_EVERY_DEALS === 0) {
@@ -45,7 +59,7 @@ export function spawnOnDeal(
     if (i >= 0) board[i] = CELL.ICE;
   }
   if (dealNumber > 0 && dealNumber % BOMB_EVERY_DEALS === 0) {
-    const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY);
+    const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY, touched);
     if (i >= 0) {
       board[i] = CELL.BOMB;
       aux.bombs[i] = BOMB_FUSE;
@@ -95,7 +109,7 @@ export function explodeBomb(board: Board, aux: SpecialsState, center: number): n
 }
 
 /** Reward for a 3+ line clear: a wild cell that helps complete row and column. */
-export function grantWild(board: Board, rng: Rng): void {
-  const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY);
+export function grantWild(board: Board, rng: Rng, touched?: Uint8Array | null): void {
+  const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY, touched);
   if (i >= 0) board[i] = CELL.WILD;
 }

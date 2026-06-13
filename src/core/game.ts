@@ -37,6 +37,8 @@ const MAX_TARGET_SECONDS = 5;
 export interface GameState {
   mode: Mode;
   board: Board;
+  /** 1 where a block has ever been placed this game — specials prefer virgin cells. */
+  touched: Uint8Array;
   tray: (string | null)[];
   score: number;
   streak: number;
@@ -55,8 +57,9 @@ export interface GameState {
   rushTimeLeft: number | null;
 }
 
-export interface SerializedGame extends Omit<GameState, 'board'> {
+export interface SerializedGame extends Omit<GameState, 'board' | 'touched'> {
   board: number[];
+  touched: number[];
 }
 
 export interface PlaceResult {
@@ -92,6 +95,7 @@ export class Game {
     this.state = {
       mode: opts.mode,
       board: new Uint8Array(BOARD_SIZE * BOARD_SIZE),
+      touched: new Uint8Array(BOARD_SIZE * BOARD_SIZE),
       tray: [null, null, null],
       score: 0,
       streak: 0,
@@ -120,6 +124,7 @@ export class Game {
       const i = this.rng.int(b.length);
       if (b[i] === CELL.EMPTY) {
         b[i] = 1 + this.rng.int(8);
+        this.state.touched[i] = 1;
         placed++;
       }
     }
@@ -178,6 +183,7 @@ export class Game {
     };
 
     place(s.board, piece, col, row);
+    for (const [c, r] of piece.cells) s.touched[idx(col + c, row + r)] = 1;
     s.score += piece.cells.length;
 
     const lines = findCompletedLines(s.board);
@@ -218,7 +224,7 @@ export class Game {
       result.earned.push(this.randomPowerUp());
     }
 
-    if (result.linesCleared >= 3) grantWild(s.board, this.rng);
+    if (result.linesCleared >= 3) grantWild(s.board, this.rng, s.touched);
 
     tickPlacement(s.board, s.aux);
     this.updateTimeTargets(result);
@@ -274,7 +280,7 @@ export class Game {
     s.dealNumber++;
     s.dealsSinceClear = s.clearedThisDeal ? 0 : s.dealsSinceClear + 1;
     s.clearedThisDeal = false;
-    spawnOnDeal(s.board, s.aux, this.rng, s.dealNumber, s.score);
+    spawnOnDeal(s.board, s.aux, this.rng, s.dealNumber, s.score, s.touched);
     s.tray = dealTray(s.board, this.rng, s.dealsSinceClear);
   }
 
@@ -378,13 +384,13 @@ export class Game {
 
   serialize(): SerializedGame {
     this.syncRng();
-    const { board, ...rest } = this.state;
-    return structuredClone({ ...rest, board: Array.from(board) });
+    const { board, touched, ...rest } = this.state;
+    return structuredClone({ ...rest, board: Array.from(board), touched: Array.from(touched) });
   }
 
   static deserialize(data: SerializedGame): Game {
     const game = Object.create(Game.prototype) as Game;
-    const { board, ...rest } = structuredClone(data);
+    const { board, touched, ...rest } = structuredClone(data);
     // migrate saves from the old one-placement-grace format
     const legacy = rest as { grace?: boolean; misses?: number; totalLines?: number };
     if (legacy.misses === undefined) {
@@ -393,7 +399,12 @@ export class Game {
     }
     legacy.totalLines ??= 0;
     (rest.aux as { times?: Record<number, number> }).times ??= {};
-    game.state = { ...rest, board: new Uint8Array(board) };
+    game.state = {
+      ...rest,
+      board: new Uint8Array(board),
+      // legacy saves: treat currently-filled cells as touched
+      touched: touched ? new Uint8Array(touched) : new Uint8Array(board.map((v) => (v ? 1 : 0))),
+    };
     (game as unknown as { rng: Rng }).rng = new Rng(0);
     (game as unknown as { rng: Rng }).rng.setState(data.rngState);
     (game as unknown as { undoSnapshot: GameState | null }).undoSnapshot = null;
