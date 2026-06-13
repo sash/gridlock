@@ -14,7 +14,7 @@ import * as storage from './storage';
 
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
-const LINES_PER_LEVEL = 10; // each level visibly upgrades the block material
+const LINES_PER_LEVEL = 3; // levels come fast; blocks reach the top material by ~12 lines
 
 /** Haptic cues forwarded to the React Native shell (no-op on the web). */
 function nativeHaptic(kind: 'place' | 'clear' | 'big-clear' | 'perfect' | 'game-over'): void {
