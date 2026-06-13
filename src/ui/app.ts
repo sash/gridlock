@@ -265,7 +265,7 @@ export class GameApp {
     this.tray.render(g.state.tray, this.drag?.slot ?? null);
     // Zen has no leaderboard per spec §6 — never show or track a best score
     this.hud.setScore(g.state.score, g.state.mode === 'zen' ? 0 : storage.getHighScore(g.state.mode));
-    this.hud.setStreak(g.state.streak, g.state.grace, streakMultiplier(g.state.streak));
+    this.hud.setStreak(g.state.streak, g.state.misses, streakMultiplier(g.state.streak));
     this.hud.setRushTime(g.state.rushTimeLeft);
     this.hud.setPowerUps(this.inventory, g.state.used, this.armed, !g.state.over);
     this.updateNearDeath();

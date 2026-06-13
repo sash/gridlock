@@ -239,7 +239,7 @@ export class Hud {
             <li>▪️ 1 point per cell placed</li>
             <li>▪️ Clears: 1 line = 80 · 2 = 200 · 3 = 450 · 4+ = 800 and up</li>
             <li>🔥 Back-to-back clears build a streak that multiplies line points, up to ×5.
-            It survives exactly one placement without a clear — the flame dims as a warning.
+            It survives two placements without a clear — the flame dims as it cools.
             When the screen edges glow warm, your streak is hot (×2.5+).</li>
             <li>✨ Emptying the entire board: +300 Perfect Clear</li>
           </ul>
@@ -277,7 +277,7 @@ export class Hud {
     this.el('gl-newgame-btn').addEventListener('click', () => cb.onRestart());
     this.el('gl-flame').addEventListener('click', () => {
       if (this.el('gl-flame').textContent) {
-        this.toast('🔥 Streak: clear lines back-to-back to multiply line points, up to ×5. It survives one miss — the dim flame is your warning. The glowing screen edge means you’re hot (×2.5+).', 4200);
+        this.toast('🔥 Streak: clear lines back-to-back to multiply line points, up to ×5. It survives two placements without a clear — the dimming flame is your warning. The glowing screen edge means you’re hot (×2.5+).', 4200);
       }
     });
     this.el('gl-help-btn-game').addEventListener('click', () => this.showHelp());
@@ -341,8 +341,8 @@ export class Hud {
     this.el('gl-high').textContent = high > 0 ? `Best ${high}` : '';
   }
 
-  /** Flame meter: shows the multiplier, "cools" (fades) during the grace placement. */
-  setStreak(streak: number, grace: boolean, multiplier: number): void {
+  /** Flame meter: shows the multiplier, "cools" (fades) in steps as misses accumulate. */
+  setStreak(streak: number, misses: number, multiplier: number): void {
     const flame = this.el('gl-flame');
     // glow strictly tracks the live multiplier — it must die with the streak
     this.glowOn = streak > 0 && multiplier >= 2.5;
@@ -353,7 +353,7 @@ export class Hud {
       return;
     }
     flame.textContent = `🔥 ×${multiplier}`;
-    flame.style.opacity = grace ? '0.35' : '1';
+    flame.style.opacity = ['1', '0.65', '0.35'][Math.min(misses, 2)];
   }
 
   setRushTime(secondsLeft: number | null): void {

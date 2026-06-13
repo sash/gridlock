@@ -56,13 +56,15 @@ describe('placement', () => {
     expect(g.state.board[idx(0, 0)]).toBe(CELL.EMPTY);
   });
 
-  test('streak survives one non-clearing placement, dies on the second', () => {
+  test('streak survives two non-clearing placements, dies on the third', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
     g.state.streak = 2;
     g.place(0, 3, 3);
     expect(g.state.streak).toBe(2);
     g.place(1, 4, 4);
+    expect(g.state.streak).toBe(2);
+    g.place(2, 5, 5);
     expect(g.state.streak).toBe(0);
   });
 

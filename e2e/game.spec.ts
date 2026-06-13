@@ -196,8 +196,14 @@ test('streak edge glow turns off when the streak dies', async ({ page }) => {
   });
   await expect(page.locator('#gl-glow')).toHaveCSS('opacity', '1');
   await page.evaluate(() => {
-    window.__game!.placeAt(1, 4, 4); // no clear — grace, streak survives
-    window.__game!.placeAt(2, 6, 6); // no clear — streak dies
+    window.__game!.placeAt(1, 4, 4); // miss 1 — streak survives
+    window.__game!.placeAt(2, 6, 6); // miss 2 — still alive (two-placement grace)
+  });
+  await expect(page.locator('#gl-glow')).toHaveCSS('opacity', '1');
+  await page.evaluate(() => {
+    const g = window.__game!.game!;
+    g.state.tray = ['DOT_0', null, null];
+    window.__game!.placeAt(0, 0, 4); // miss 3 — streak dies
   });
   await expect(page.locator('#gl-glow')).toHaveCSS('opacity', '0');
 });

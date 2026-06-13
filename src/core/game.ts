@@ -37,7 +37,7 @@ export interface GameState {
   tray: (string | null)[];
   score: number;
   streak: number;
-  grace: boolean;
+  misses: number;
   seed: number;
   rngState: number;
   dealNumber: number;
@@ -88,7 +88,7 @@ export class Game {
       tray: [null, null, null],
       score: 0,
       streak: 0,
-      grace: false,
+      misses: 0,
       seed: opts.seed,
       rngState: 0,
       dealNumber: 1,
@@ -185,9 +185,9 @@ export class Game {
 
     const cleared = result.linesCleared > 0;
     const multBefore = streakMultiplier(s.streak);
-    const next = updateStreak({ streak: s.streak, grace: s.grace }, cleared);
+    const next = updateStreak({ streak: s.streak, misses: s.misses }, cleared);
     s.streak = next.streak;
-    s.grace = next.grace;
+    s.misses = next.misses;
     if (cleared) {
       result.linePointsGained = Math.round(linePoints(result.linesCleared) * streakMultiplier(s.streak));
       s.score += result.linePointsGained;
@@ -343,6 +343,12 @@ export class Game {
   static deserialize(data: SerializedGame): Game {
     const game = Object.create(Game.prototype) as Game;
     const { board, ...rest } = structuredClone(data);
+    // migrate saves from the old one-placement-grace format
+    const legacy = rest as { grace?: boolean; misses?: number };
+    if (legacy.misses === undefined) {
+      legacy.misses = legacy.grace ? 1 : 0;
+      delete legacy.grace;
+    }
     game.state = { ...rest, board: new Uint8Array(board) };
     (game as unknown as { rng: Rng }).rng = new Rng(0);
     (game as unknown as { rng: Rng }).rng.setState(data.rngState);

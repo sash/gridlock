@@ -29,22 +29,23 @@ describe('streak multiplier', () => {
   });
 });
 
-describe('streak state machine (with one-placement grace)', () => {
-  test('clear increments streak and resets grace', () => {
-    expect(updateStreak({ streak: 0, grace: false }, true)).toEqual({ streak: 1, grace: false });
-    expect(updateStreak({ streak: 3, grace: true }, true)).toEqual({ streak: 4, grace: false });
+describe('streak state machine (two-placement grace)', () => {
+  test('clear increments streak and resets the miss counter', () => {
+    expect(updateStreak({ streak: 0, misses: 0 }, true)).toEqual({ streak: 1, misses: 0 });
+    expect(updateStreak({ streak: 3, misses: 2 }, true)).toEqual({ streak: 4, misses: 0 });
   });
 
-  test('first non-clearing placement enters grace, streak survives', () => {
-    expect(updateStreak({ streak: 3, grace: false }, false)).toEqual({ streak: 3, grace: true });
+  test('streak survives two consecutive non-clearing placements', () => {
+    expect(updateStreak({ streak: 3, misses: 0 }, false)).toEqual({ streak: 3, misses: 1 });
+    expect(updateStreak({ streak: 3, misses: 1 }, false)).toEqual({ streak: 3, misses: 2 });
   });
 
-  test('second consecutive non-clearing placement kills the streak', () => {
-    expect(updateStreak({ streak: 3, grace: true }, false)).toEqual({ streak: 0, grace: false });
+  test('third consecutive non-clearing placement kills the streak', () => {
+    expect(updateStreak({ streak: 3, misses: 2 }, false)).toEqual({ streak: 0, misses: 0 });
   });
 
   test('no streak and no clear stays at zero', () => {
-    expect(updateStreak({ streak: 0, grace: false }, false)).toEqual({ streak: 0, grace: false });
+    expect(updateStreak({ streak: 0, misses: 0 }, false)).toEqual({ streak: 0, misses: 0 });
   });
 });
 
