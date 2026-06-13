@@ -153,7 +153,7 @@ const PU_INFO: Record<PowerUpKind, { name: string; desc: string }> = {
 const MODES: Array<{ mode: Mode; label: string; desc: string }> = [
   { mode: 'classic', label: 'Classic', desc: 'Endless — chase your high score' },
   { mode: 'daily', label: 'Daily Puzzle', desc: 'Same puzzle for everyone · one try per day · share your result' },
-  { mode: 'rush', label: 'Rush', desc: '90 seconds · pieces refill instantly · go fast' },
+  { mode: 'rush', label: 'Rush', desc: '90 seconds · clear ⏱ targets to bank extra time · go fast' },
   { mode: 'zen', label: 'Zen', desc: 'No game over, no pressure — just placing blocks' },
 ];
 
@@ -248,6 +248,7 @@ export class Hud {
             blasts a 3×3 area free; let it hit 0 and it petrifies…</li>
             <li>🪨 <b>Stone</b> — can't be cleared. Crumbles by itself after 15 placements.</li>
             <li>🌈 <b>Wild</b> — earned by a 3-line clear; helps complete both its row and its column.</li>
+            <li>⏱ <b>Time target</b> <span style="opacity:.7">(Rush only)</span> — a glowing ring marks a block worth bonus seconds; clear its line in time to bank them.</li>
           </ul>
           <h3>Power-ups <span style="font-weight:400;opacity:.7">(bottom bar, one use each per game)</span></h3>
           <ul>

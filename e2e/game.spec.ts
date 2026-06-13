@@ -113,10 +113,14 @@ test('rush mode runs its 90s timer', async ({ page }) => {
   await page.waitForTimeout(1200);
   const t1 = await page.evaluate(() => window.__game!.game!.state.rushTimeLeft);
   expect(t1).toBeLessThan(t0!);
-  // tray refills instantly in rush
+  // tray refills instantly in rush, and a time target appears after placing
   await page.evaluate(() => window.__game!.placeAt(0, 0, 0));
-  const tray = await page.evaluate(() => window.__game!.game!.state.tray.filter(Boolean).length);
-  expect(tray).toBe(3);
+  const after = await page.evaluate(() => ({
+    tray: window.__game!.game!.state.tray.filter(Boolean).length,
+    targets: Object.keys(window.__game!.game!.state.aux.times).length,
+  }));
+  expect(after.tray).toBe(3);
+  expect(after.targets).toBe(1);
 });
 
 test('daily mode locks to one attempt and offers a share card', async ({ page }) => {

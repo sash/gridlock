@@ -98,7 +98,7 @@ Ice and bombs convert the late game from “keep the board tidy” into targeted
 
 1. **Classic** — endless, as described. High-score chase.
 1. **Daily Puzzle** — everyone gets the same seeded piece sequence and starting board (some cells pre-filled). One attempt per day, shareable result (Wordle-style emoji grid). Huge retention lever, trivially cheap to build once seeding exists.
-1. **Rush** — 90 seconds, pieces auto-refill the tray instantly (you don’t wait to place all 3). Pure speed and pattern recognition.
+1. **Rush** — 90 seconds, pieces auto-refill the tray instantly (you don’t wait to place all 3). Pure speed and pattern recognition. **Time targets:** after each placement a random filled block gets marked (max 3 active) with a 2–5s value; clearing its line banks those seconds onto the clock.
 1. **Zen** — no game over: if nothing fits, the worst 2 rows dissolve. No leaderboard. For the bus ride home.
 
 -----

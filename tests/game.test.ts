@@ -255,6 +255,44 @@ describe('modes', () => {
     expect(g.state.tray.filter(Boolean).length).toBe(3);
   });
 
+  test('rush: each placement spawns a time target on a filled cell (max 3)', () => {
+    const g = new Game({ mode: 'rush', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    g.place(0, 3, 3);
+    let targets = Object.entries(g.state.aux.times);
+    expect(targets.length).toBe(1);
+    const [cell, seconds] = targets[0];
+    expect(g.state.board[Number(cell)]).toBeGreaterThanOrEqual(1);
+    expect(g.state.board[Number(cell)]).toBeLessThanOrEqual(8);
+    expect(seconds).toBeGreaterThanOrEqual(2);
+    expect(seconds).toBeLessThanOrEqual(5);
+    for (let i = 0; i < 6; i++) {
+      g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+      g.place(0, i, 5);
+    }
+    expect(Object.keys(g.state.aux.times).length).toBeLessThanOrEqual(3);
+  });
+
+  test('rush: clearing a line with a time target banks its seconds', () => {
+    const g = new Game({ mode: 'rush', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    for (let c = 0; c < 7; c++) g.state.board[idx(c, 0)] = 1;
+    g.state.board[idx(0, 7)] = 1; // avoid perfect clear
+    g.state.aux.times[idx(3, 0)] = 4;
+    g.state.rushTimeLeft = 30;
+    const res = g.place(0, 7, 0)!;
+    expect(res.timeGained).toBe(4);
+    expect(g.state.rushTimeLeft).toBeGreaterThanOrEqual(34);
+    expect(g.state.aux.times[idx(3, 0)]).toBeUndefined();
+  });
+
+  test('classic: no time targets ever spawn', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    g.place(0, 3, 3);
+    expect(Object.keys(g.state.aux.times).length).toBe(0);
+  });
+
   test('rush: time runs out → game over', () => {
     const g = new Game({ mode: 'rush', seed: 1 });
     expect(g.state.rushTimeLeft).toBe(90);

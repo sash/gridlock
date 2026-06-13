@@ -448,6 +448,10 @@ export class GameApp {
       nativeHaptic('place');
       this.audio.place();
     }
+    if (result.timeGained > 0) {
+      this.hud.toast(`⏱ +${result.timeGained} seconds banked!`, 1400);
+      this.audio.powerUp();
+    }
     if (result.perfectClear) {
       nativeHaptic('perfect');
       this.audio.perfectClear();

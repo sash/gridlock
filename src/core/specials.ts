@@ -12,10 +12,12 @@ export const BOMB_EVERY_DEALS = 10;
 export interface SpecialsState {
   bombs: Record<number, number>;
   stones: Record<number, number>;
+  /** Rush only: cells whose clear banks bonus seconds. */
+  times: Record<number, number>;
 }
 
 export function createSpecialsState(): SpecialsState {
-  return { bombs: {}, stones: {} };
+  return { bombs: {}, stones: {}, times: {} };
 }
 
 function randomCellWhere(board: Board, rng: Rng, pred: (v: number) => boolean): number {

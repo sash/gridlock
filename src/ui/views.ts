@@ -72,6 +72,19 @@ export class BoardView {
           drawCell(g, x, y, cs, this.theme.colors[v - 1]);
           const sprite = fruitSprite(v, stage, x + cs / 2, y + cs / 2, cs);
           if (sprite) this.glyphs.addChild(sprite);
+          const seconds = aux.times[idx(c, r)];
+          if (seconds !== undefined) {
+            // rush time target: amber ring + banked-seconds badge
+            g.roundRect(x + GAP + 1, y + GAP + 1, cs - GAP * 2 - 2, cs - GAP * 2 - 2, cs * 0.16)
+              .stroke({ color: 0xffd166, width: 3 });
+            const badge = new Text({
+              text: `+${seconds}s`,
+              style: { fontSize: cs * 0.28, fill: 0xffd166, fontWeight: '800', stroke: { color: 0x000000, width: 3 } },
+            });
+            badge.anchor.set(1, 1);
+            badge.position.set(x + cs - 3, y + cs - 2);
+            this.glyphs.addChild(badge);
+          }
         } else {
           drawCell(g, x, y, cs, SPECIAL_COLORS[v] ?? 0x888888);
           const glyph = new Text({

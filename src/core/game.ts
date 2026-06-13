@@ -30,6 +30,9 @@ export type PowerUpKind = 'rotate' | 'swap' | 'hammer' | 'undo';
 export const RUSH_SECONDS = 90;
 const DAILY_PREFILL_CELLS = 10;
 const ZEN_DISSOLVE_ROWS = 2;
+const MAX_TIME_TARGETS = 3;
+const MIN_TARGET_SECONDS = 2;
+const MAX_TARGET_SECONDS = 5;
 
 export interface GameState {
   mode: Mode;
@@ -68,6 +71,8 @@ export interface PlaceResult {
   perfectClear: boolean;
   gameOver: boolean;
   zenDissolved: boolean;
+  /** Rush: bonus seconds banked by clearing time targets. */
+  timeGained: number;
   /** Power-ups earned this placement (streak cap, perfect clear). */
   earned: PowerUpKind[];
 }
@@ -168,6 +173,7 @@ export class Game {
       perfectClear: false,
       gameOver: false,
       zenDissolved: false,
+      timeGained: 0,
       earned: [],
     };
 
@@ -215,6 +221,7 @@ export class Game {
     if (result.linesCleared >= 3) grantWild(s.board, this.rng);
 
     tickPlacement(s.board, s.aux);
+    this.updateTimeTargets(result);
 
     s.tray[slot] = null;
     if (s.mode === 'rush') {
@@ -226,6 +233,36 @@ export class Game {
     this.resolveStuckBoard(result);
     this.syncRng();
     return result;
+  }
+
+  /** Rush only: bank seconds for cleared targets, then mark a fresh one. */
+  private updateTimeTargets(result: PlaceResult): void {
+    const s = this.state;
+    if (s.mode !== 'rush' || s.rushTimeLeft === null) return;
+    for (const i of [...result.clearedCells, ...result.explodedCells]) {
+      const seconds = s.aux.times[i];
+      if (seconds) {
+        result.timeGained += seconds;
+        delete s.aux.times[i];
+      }
+    }
+    // a target whose cell is somehow empty (e.g. blast) is stale — drop it
+    for (const key of Object.keys(s.aux.times)) {
+      if (!isFilled(s.board[Number(key)])) delete s.aux.times[Number(key)];
+    }
+    if (result.timeGained > 0) {
+      s.rushTimeLeft = Math.min(s.rushTimeLeft + result.timeGained, 999);
+    }
+    if (Object.keys(s.aux.times).length < MAX_TIME_TARGETS) {
+      const candidates: number[] = [];
+      for (let i = 0; i < s.board.length; i++) {
+        if (s.board[i] >= 1 && s.board[i] <= 8 && s.aux.times[i] === undefined) candidates.push(i);
+      }
+      if (candidates.length > 0) {
+        const cell = candidates[this.rng.int(candidates.length)];
+        s.aux.times[cell] = MIN_TARGET_SECONDS + this.rng.int(MAX_TARGET_SECONDS - MIN_TARGET_SECONDS + 1);
+      }
+    }
   }
 
   private dealOne(): string {
@@ -322,6 +359,7 @@ export class Game {
     s.board[i] = CELL.EMPTY;
     delete s.aux.bombs[i];
     delete s.aux.stones[i];
+    delete s.aux.times[i]; // hammering a target forfeits it
     s.used.hammer = true;
     return true;
   }
@@ -354,6 +392,7 @@ export class Game {
       delete legacy.grace;
     }
     legacy.totalLines ??= 0;
+    (rest.aux as { times?: Record<number, number> }).times ??= {};
     game.state = { ...rest, board: new Uint8Array(board) };
     (game as unknown as { rng: Rng }).rng = new Rng(0);
     (game as unknown as { rng: Rng }).rng.setState(data.rngState);
