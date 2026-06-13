@@ -90,11 +90,13 @@ describe('line detection and clearing', () => {
     expect([...b].every((v) => v === CELL.EMPTY)).toBe(true);
   });
 
-  test('wild cells count as filled for line checks', () => {
+  test('aura cells count as filled for line checks without occupying the board', () => {
     const b = emptyBoard();
     for (let c = 0; c < 7; c++) b[idx(c, 3)] = 1;
-    b[idx(7, 3)] = CELL.WILD;
-    expect(findCompletedLines(b).rows).toEqual([3]);
+    expect(findCompletedLines(b).rows).toEqual([]);
+    const aura = new Set([idx(7, 3)]);
+    expect(findCompletedLines(b, aura).rows).toEqual([3]);
+    expect(b[idx(7, 3)]).toBe(CELL.EMPTY); // the cell itself stays empty
   });
 
   test('stone counts as filled for line checks but survives a clear', () => {

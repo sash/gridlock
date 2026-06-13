@@ -1,5 +1,4 @@
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { fruitTexture } from './fruits';
+import { Container, Graphics, Text } from 'pixi.js';
 import { BOARD_SIZE, CELL, idx, type Board, type Lines } from '../core/board';
 import { getPiece } from '../core/pieces';
 import type { SpecialsState } from '../core/specials';
@@ -11,16 +10,44 @@ function drawCell(g: Graphics, x: number, y: number, size: number, color: number
   g.roundRect(x + GAP, y + GAP, size - GAP * 2, size - GAP * 2, size * 0.18).fill({ color, alpha });
 }
 
-/** Fruit sprite for a block, centered on the cell. Falls back to nothing pre-load. */
-function fruitSprite(color: number, stage: number, cx: number, cy: number, cellSize: number): Sprite | null {
-  const tex = fruitTexture(color, stage);
-  if (!tex) return null;
-  const sprite = new Sprite(tex);
-  sprite.anchor.set(0.5);
-  sprite.position.set(cx, cy);
-  sprite.width = sprite.height = cellSize * 0.72;
-  return sprite;
+/**
+ * Block with a material that evolves as the player levels up:
+ * 0 flat · 1 satin top-light · 2 glossy · 3 beveled gem · 4+ neon rim.
+ */
+export function drawBlock(
+  g: Graphics,
+  x: number,
+  y: number,
+  size: number,
+  color: number,
+  tier = 0,
+): void {
+  const ix = x + GAP;
+  const iy = y + GAP;
+  const is = size - GAP * 2;
+  const radius = size * 0.18;
+  g.roundRect(ix, iy, is, is, radius).fill(color);
+  if (tier >= 1) {
+    // satin: soft light across the top third
+    g.roundRect(ix + 2, iy + 2, is - 4, is * 0.34, radius * 0.8).fill({ color: 0xffffff, alpha: 0.16 });
+  }
+  if (tier >= 2) {
+    // gloss: specular dot
+    g.circle(ix + is * 0.3, iy + is * 0.28, is * 0.11).fill({ color: 0xffffff, alpha: 0.4 });
+  }
+  if (tier >= 3) {
+    // gem bevel: bright inner edge + grounded base shadow
+    g.roundRect(ix + 1.5, iy + 1.5, is - 3, is - 3, radius * 0.85).stroke({ color: 0xffffff, alpha: 0.32, width: 1.5 });
+    g.roundRect(ix + 2, iy + is * 0.72, is - 4, is * 0.24, radius * 0.6).fill({ color: 0x000000, alpha: 0.16 });
+  }
+  if (tier >= 4) {
+    // neon rim
+    g.roundRect(ix - 0.5, iy - 0.5, is + 1, is + 1, radius).stroke({ color: 0xffffff, alpha: 0.5, width: 2 });
+  }
 }
+
+/** Rainbow arm colors for the wild zone overlay: up, left, center, right, down. */
+const WILD_PALETTE = [0xef476f, 0xffd166, 0x06d6a0, 0x4cc9f0, 0x9b5de5];
 
 /** The 8×8 grid: cells, special glyphs, ghost preview, glow and pulse layers. */
 export class BoardView {
@@ -56,7 +83,7 @@ export class BoardView {
     };
   }
 
-  render(board: Board, aux: SpecialsState, stage = 0): void {
+  render(board: Board, aux: SpecialsState, tier = 0): void {
     const cs = this.cellSize;
     const g = this.cells;
     g.clear();
@@ -69,9 +96,7 @@ export class BoardView {
         if (v === CELL.EMPTY) {
           drawCell(g, x, y, cs, this.theme.emptyCell);
         } else if (v >= 1 && v <= 8) {
-          drawCell(g, x, y, cs, this.theme.colors[v - 1]);
-          const sprite = fruitSprite(v, stage, x + cs / 2, y + cs / 2, cs);
-          if (sprite) this.glyphs.addChild(sprite);
+          drawBlock(g, x, y, cs, this.theme.colors[v - 1], tier);
           const seconds = aux.times[idx(c, r)];
           if (seconds !== undefined) {
             // rush time target: amber ring + banked-seconds badge
@@ -106,6 +131,36 @@ export class BoardView {
           }
         }
       }
+    }
+    this.renderWildZones(aux, cs);
+  }
+
+  /** Wild zones: a rainbow-ringed plus that helps complete lines without blocking. */
+  private renderWildZones(aux: SpecialsState, cs: number): void {
+    for (const center of aux.wilds) {
+      const cc = center % BOARD_SIZE;
+      const cr = Math.floor(center / BOARD_SIZE);
+      const arms: Array<[number, number]> = [
+        [cc, cr - 1],
+        [cc - 1, cr],
+        [cc, cr],
+        [cc + 1, cr],
+        [cc, cr + 1],
+      ];
+      arms.forEach(([c, r], i) => {
+        if (c < 0 || c >= BOARD_SIZE || r < 0 || r >= BOARD_SIZE) return;
+        this.cells
+          .roundRect(c * cs + GAP + 1, r * cs + GAP + 1, cs - GAP * 2 - 2, cs - GAP * 2 - 2, cs * 0.16)
+          .stroke({ color: WILD_PALETTE[i], width: 2.5, alpha: 0.95 });
+        this.cells
+          .roundRect(c * cs + GAP, r * cs + GAP, cs - GAP * 2, cs - GAP * 2, cs * 0.18)
+          .fill({ color: 0xffffff, alpha: 0.07 });
+      });
+      const glyph = new Text({ text: '🌈', style: { fontSize: cs * 0.5 } });
+      glyph.anchor.set(0.5);
+      glyph.alpha = 0.95;
+      glyph.position.set((cc + 0.5) * cs, (cr + 0.5) * cs);
+      this.glyphs.addChild(glyph);
     }
   }
 
@@ -195,26 +250,22 @@ export class TrayView {
     return Math.min((this.slotWidth * 0.82) / maxSpan, this.height * 0.8 / maxSpan);
   }
 
-  render(tray: ReadonlyArray<string | null>, hiddenSlot: number | null, stage = 0): void {
+  render(tray: ReadonlyArray<string | null>, hiddenSlot: number | null, tier = 0): void {
     this.slots.forEach((slot, i) => {
       slot.removeChildren();
       const id = tray[i];
       if (!id || i === hiddenSlot) return;
       const piece = getPiece(id);
       const cs = this.trayCellSize(id);
-      const wrap = new Container();
       const g = new Graphics();
-      wrap.addChild(g);
       for (const [c, r] of piece.cells) {
-        drawCell(g, c * cs, r * cs, cs, this.theme.colors[piece.color - 1]);
-        const sprite = fruitSprite(piece.color, stage, (c + 0.5) * cs, (r + 0.5) * cs, cs);
-        if (sprite) wrap.addChild(sprite);
+        drawBlock(g, c * cs, r * cs, cs, this.theme.colors[piece.color - 1], tier);
       }
-      wrap.position.set(
+      g.position.set(
         (this.slotWidth - piece.w * cs) / 2,
         (this.height - piece.h * cs) / 2,
       );
-      slot.addChild(wrap);
+      slot.addChild(g);
     });
   }
 

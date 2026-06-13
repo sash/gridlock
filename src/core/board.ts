@@ -49,13 +49,18 @@ export interface Lines {
   cols: number[];
 }
 
-export function findCompletedLines(board: Board): Lines {
+/**
+ * Cells in `aura` (wild zones) count as filled for completion even when empty —
+ * they help finish lines without ever blocking placement.
+ */
+export function findCompletedLines(board: Board, aura?: ReadonlySet<number>): Lines {
+  const counts = (i: number) => isFilled(board[i]) || (aura?.has(i) ?? false);
   const rows: number[] = [];
   const cols: number[] = [];
   for (let r = 0; r < BOARD_SIZE; r++) {
     let full = true;
     for (let c = 0; c < BOARD_SIZE; c++) {
-      if (!isFilled(board[idx(c, r)])) {
+      if (!counts(idx(c, r))) {
         full = false;
         break;
       }
@@ -65,7 +70,7 @@ export function findCompletedLines(board: Board): Lines {
   for (let c = 0; c < BOARD_SIZE; c++) {
     let full = true;
     for (let r = 0; r < BOARD_SIZE; r++) {
-      if (!isFilled(board[idx(c, r)])) {
+      if (!counts(idx(c, r))) {
         full = false;
         break;
       }

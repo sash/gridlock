@@ -138,13 +138,44 @@ describe('placement', () => {
     expect(g.state.aux.bombs[idx(3, 0)]).toBeUndefined();
   });
 
-  test('3+ line clear grants a wild cell', () => {
+  test('3+ line clear grants a wild zone (board stays clear of it)', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['SQ3_0', 'DOT_0', 'DOT_0'];
     for (const r of [0, 1, 2]) fillRowExcept(g, r, 0, 1, 2);
     const res = g.place(0, 0, 0)!;
     expect(res.linesCleared).toBe(3);
-    expect([...g.state.board].filter((v) => v === CELL.WILD).length).toBe(1);
+    expect(g.state.aux.wilds.length).toBe(1);
+    expect([...g.state.board].includes(CELL.WILD)).toBe(false);
+  });
+
+  test('pieces can be placed onto empty wild-aura cells', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['SQ3_0', 'DOT_0', 'DOT_0'];
+    g.state.aux.wilds = [idx(4, 4)];
+    expect(g.canPlaceAt(0, 3, 3)).toBe(true); // 3×3 overlapping the whole aura
+    expect(g.place(0, 3, 3)).not.toBeNull();
+  });
+
+  test('a line completed through empty aura cells clears, consuming the wild', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    // row 4: fill all but (3,4), (4,4), (5,4); wild at (4,4) covers those three
+    for (let c = 0; c < 8; c++) if (c < 3 || c > 5) g.state.board[idx(c, 4)] = 1;
+    g.state.board[idx(0, 7)] = 1; // avoid perfect clear
+    g.state.aux.wilds = [idx(4, 4)];
+    const res = g.place(0, 3, 4)!; // fill (3,4); (4,4)+(5,4) covered by aura
+    expect(res.linesCleared).toBe(1);
+    expect(g.state.aux.wilds.length).toBe(0); // consumed by the clear
+    expect(g.state.board[idx(0, 4)]).toBe(CELL.EMPTY);
+  });
+
+  test('legacy saves with on-board wild cells migrate to wild zones', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    const data = g.serialize();
+    data.board[idx(2, 2)] = CELL.WILD;
+    const restored = Game.deserialize(data);
+    expect(restored.state.board[idx(2, 2)]).toBe(CELL.EMPTY);
+    expect(restored.state.aux.wilds).toContain(idx(2, 2));
   });
 });
 

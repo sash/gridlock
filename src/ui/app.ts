@@ -1,5 +1,6 @@
-import { Application, Container, Graphics, Sprite } from 'pixi.js';
-import { fruitTexture } from './fruits';
+import { Application, Container, Graphics } from 'pixi.js';
+import { wildAura } from '../core/specials';
+import { drawBlock } from './views';
 import { Game, type Mode, type PlaceResult, type PowerUpKind } from '../core/game';
 import { BOARD_SIZE, CELL } from '../core/board';
 import { getPiece } from '../core/pieces';
@@ -13,6 +14,7 @@ import * as storage from './storage';
 
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
+const LINES_PER_LEVEL = 10; // each level visibly upgrades the block material
 
 /** Haptic cues forwarded to the React Native shell (no-op on the web). */
 function nativeHaptic(kind: 'place' | 'clear' | 'big-clear' | 'perfect' | 'game-over'): void {
@@ -27,8 +29,8 @@ const SPECIAL_INTROS: Array<[number, string]> = [
   [CELL.ICE, '🧊 Ice! It takes two clears to remove'],
   [CELL.BOMB, '💣 A bomb! Clear its line before the counter hits 0'],
   [CELL.STONE, '🪨 Petrified! Stone can’t be cleared for 15 placements'],
-  [CELL.WILD, '🌈 Wild earned! It completes both its row and column'],
 ];
+const WILD_INTRO = '🌈 Wild zone earned! Its cross counts as filled for clears but never blocks you';
 
 /** Shown when the player taps a special brick on the board. */
 const SPECIAL_TAP_INFO: Record<number, string> = {
@@ -37,7 +39,7 @@ const SPECIAL_TAP_INFO: Record<number, string> = {
   [CELL.CRACKED]: '🧊 Cracked ice — one more clear removes it',
   [CELL.BOMB]: '💣 Bomb — clear its line before the counter reaches 0 to blast a 3×3 area; too late and it turns to stone',
   [CELL.STONE]: '🪨 Stone — can’t be cleared; it crumbles on its own after 15 placements',
-  [CELL.WILD]: '🌈 Wild — counts as filled for both its row and its column',
+  [CELL.WILD]: '🌈 Wild zone — never blocks your pieces, but its cross counts as filled when completing lines. One clear through it uses it up',
 };
 
 interface DragState {
@@ -268,8 +270,12 @@ export class GameApp {
   private refresh(): void {
     const g = this.game;
     if (!g) return;
-    this.board.render(g.state.board, g.state.aux, g.state.totalLines);
-    this.tray.render(g.state.tray, this.drag?.slot ?? null, g.state.totalLines);
+    this.board.render(g.state.board, g.state.aux, this.levelTier());
+    this.tray.render(g.state.tray, this.drag?.slot ?? null, this.levelTier());
+    this.hud.setLevel(
+      Math.floor(g.state.totalLines / LINES_PER_LEVEL),
+      (g.state.totalLines % LINES_PER_LEVEL) / LINES_PER_LEVEL,
+    );
     // Zen has no leaderboard per spec §6 — never show or track a best score
     this.hud.setScore(g.state.score, g.state.mode === 'zen' ? 0 : storage.getHighScore(g.state.mode));
     this.hud.setStreak(g.state.streak, g.state.misses, streakMultiplier(g.state.streak));
@@ -330,8 +336,12 @@ export class GameApp {
       // tapping a special brick on the board explains what it does
       const cell = this.cellFromEvent(e);
       if (cell) {
-        const v = g.state.board[cell.row * BOARD_SIZE + cell.col];
+        const cellIdx = cell.row * BOARD_SIZE + cell.col;
+        const v = g.state.board[cellIdx];
         let info = SPECIAL_TAP_INFO[v];
+        if (!info && g.state.aux.wilds.some((center) => wildAura([center]).has(cellIdx))) {
+          info = SPECIAL_TAP_INFO[CELL.WILD];
+        }
         if (v === CELL.BOMB) {
           const fuse = g.state.aux.bombs[cell.row * BOARD_SIZE + cell.col];
           if (fuse !== undefined) info = `💣 Bomb — ${fuse} placement${fuse === 1 ? '' : 's'} left to clear its line, or it turns to stone`;
@@ -353,21 +363,11 @@ export class GameApp {
     const piece = getPiece(pieceId);
     const cs = this.board.cellSize;
     for (const [c, r] of piece.cells) {
-      shape
-        .roundRect(c * cs + 2, r * cs + 2, cs - 4, cs - 4, cs * 0.18)
-        .fill(this.theme.colors[piece.color - 1]);
-      const tex = fruitTexture(piece.color, g.state.totalLines);
-      if (tex) {
-        const sprite = new Sprite(tex);
-        sprite.anchor.set(0.5);
-        sprite.position.set((c + 0.5) * cs, (r + 0.5) * cs);
-        sprite.width = sprite.height = cs * 0.72;
-        gfx.addChild(sprite);
-      }
+      drawBlock(shape, c * cs, r * cs, cs, this.theme.colors[piece.color - 1], this.levelTier());
     }
     this.stage.addChild(gfx);
     this.drag = { slot, pieceId, gfx, col: -1, row: -1, valid: false };
-    this.tray.render(g.state.tray, slot, g.state.totalLines);
+    this.tray.render(g.state.tray, slot, this.levelTier());
     this.moveDrag(e);
   }
 
@@ -438,6 +438,16 @@ export class GameApp {
       this.audio.clear(result.linesCleared, g.state.streak);
       this.audio.cheer(result.linesCleared);
       this.celebrate(result.linesCleared, g.state.streak);
+      const before = Math.floor((g.state.totalLines - result.linesCleared) / LINES_PER_LEVEL);
+      const after = Math.floor(g.state.totalLines / LINES_PER_LEVEL);
+      if (after > before) {
+        setTimeout(() => {
+          this.hud.cheer(`LEVEL ${after + 1}!`, '✨ your blocks evolve', '#ffd166');
+          this.audio.perfectClear();
+          this.audio.say(`Level ${after + 1}!`);
+          this.refresh();
+        }, 750);
+      }
       this.particles.burst(
         [...result.clearedCells, ...result.explodedCells],
         result.lines,
@@ -470,6 +480,11 @@ export class GameApp {
     this.introduceSpecials();
     if (result.gameOver) this.finishGame();
     return result;
+  }
+
+  private levelTier(): number {
+    const lines = this.game?.state.totalLines ?? 0;
+    return Math.min(4, Math.floor(lines / LINES_PER_LEVEL));
   }
 
   /** Big on-screen praise scaled to the size of the clear — shown and spoken. */
@@ -507,8 +522,11 @@ export class GameApp {
     } catch {
       seen = [];
     }
-    for (const [cell, message] of SPECIAL_INTROS) {
-      if (seen.includes(cell) || !g.state.board.includes(cell)) continue;
+    const intros: Array<[number, string]> = [...SPECIAL_INTROS];
+    if (g.state.aux.wilds.length > 0) intros.push([CELL.WILD, WILD_INTRO]);
+    for (const [cell, message] of intros) {
+      if (seen.includes(cell)) continue;
+      if (cell !== CELL.WILD && !g.state.board.includes(cell)) continue;
       this.hud.toast(message, 3200);
       seen.push(cell);
       try {

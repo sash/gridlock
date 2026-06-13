@@ -14,10 +14,27 @@ export interface SpecialsState {
   stones: Record<number, number>;
   /** Rush only: cells whose clear banks bonus seconds. */
   times: Record<number, number>;
+  /** Wild zone centers: plus-shaped auras that help complete lines. */
+  wilds: number[];
 }
 
 export function createSpecialsState(): SpecialsState {
-  return { bombs: {}, stones: {}, times: {} };
+  return { bombs: {}, stones: {}, times: {}, wilds: [] };
+}
+
+/** Plus-shaped aura of one or more wild centers, clipped at board edges. */
+export function wildAura(centers: readonly number[]): Set<number> {
+  const aura = new Set<number>();
+  for (const center of centers) {
+    const c = center % BOARD_SIZE;
+    const r = Math.floor(center / BOARD_SIZE);
+    aura.add(center);
+    if (c > 0) aura.add(center - 1);
+    if (c < BOARD_SIZE - 1) aura.add(center + 1);
+    if (r > 0) aura.add(center - BOARD_SIZE);
+    if (r < BOARD_SIZE - 1) aura.add(center + BOARD_SIZE);
+  }
+  return aura;
 }
 
 /** Cells never built on this game are 3× likelier special spawn spots. */
@@ -108,8 +125,17 @@ export function explodeBomb(board: Board, aux: SpecialsState, center: number): n
   return cleared;
 }
 
-/** Reward for a 3+ line clear: a wild cell that helps complete row and column. */
-export function grantWild(board: Board, rng: Rng, touched?: Uint8Array | null): void {
+/**
+ * Reward for a 3+ line clear: a wild zone. Its plus-shaped aura counts as
+ * filled for line completion but never blocks placement; one clear through
+ * the zone consumes it.
+ */
+export function grantWild(
+  board: Board,
+  rng: Rng,
+  touched: Uint8Array | null | undefined,
+  aux: SpecialsState,
+): void {
   const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY, touched);
-  if (i >= 0) board[i] = CELL.WILD;
+  if (i >= 0) aux.wilds.push(i);
 }

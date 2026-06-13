@@ -7,6 +7,7 @@ import {
   tickPlacement,
   explodeBomb,
   grantWild,
+  wildAura,
   BOMB_FUSE,
   STONE_LIFETIME,
 } from '../src/core/specials';
@@ -142,15 +143,35 @@ describe('virgin-cell weighting', () => {
 });
 
 describe('grantWild', () => {
-  test('places a wild on a random empty cell', () => {
+  test('registers a wild zone centered on an empty cell, board untouched', () => {
     const b = board((c) => c < 7);
-    grantWild(b, new Rng(3));
-    expect([...b].filter((v) => v === CELL.WILD).length).toBe(1);
+    const aux = createSpecialsState();
+    grantWild(b, new Rng(3), null, aux);
+    expect(aux.wilds.length).toBe(1);
+    expect(b[aux.wilds[0]]).toBe(CELL.EMPTY);
   });
 
   test('does nothing on a full board', () => {
     const b = board(() => true);
-    grantWild(b, new Rng(3));
-    expect([...b].includes(CELL.WILD)).toBe(false);
+    const aux = createSpecialsState();
+    grantWild(b, new Rng(3), null, aux);
+    expect(aux.wilds.length).toBe(0);
+  });
+});
+
+describe('wildAura', () => {
+  test('covers a plus shape: center + 4 orthogonal neighbors', () => {
+    const aura = wildAura([idx(4, 4)]);
+    expect([...aura].sort((a, b2) => a - b2)).toEqual(
+      [idx(4, 3), idx(3, 4), idx(4, 4), idx(5, 4), idx(4, 5)].sort((a, b2) => a - b2),
+    );
+  });
+
+  test('clips at board edges', () => {
+    const aura = wildAura([idx(0, 0)]);
+    expect(aura.size).toBe(3); // center, right, down
+    expect(aura.has(idx(0, 0))).toBe(true);
+    expect(aura.has(idx(1, 0))).toBe(true);
+    expect(aura.has(idx(0, 1))).toBe(true);
   });
 });

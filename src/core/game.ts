@@ -20,6 +20,7 @@ import {
   grantWild,
   spawnOnDeal,
   tickPlacement,
+  wildAura,
   type SpecialsState,
 } from './specials';
 import { dealTray } from './generator';
@@ -146,7 +147,7 @@ export class Game {
     if (!id || !this.canPlaceAt(slot, col, row)) return null;
     const copy = new Uint8Array(this.state.board);
     place(copy, getPiece(id), col, row);
-    return findCompletedLines(copy);
+    return findCompletedLines(copy, wildAura(this.state.aux.wilds));
   }
 
   totalValidMoves(): number {
@@ -186,13 +187,24 @@ export class Game {
     for (const [c, r] of piece.cells) s.touched[idx(col + c, row + r)] = 1;
     s.score += piece.cells.length;
 
-    const lines = findCompletedLines(s.board);
+    const aura = wildAura(s.aux.wilds);
+    const lines = findCompletedLines(s.board, aura);
     result.lines = lines;
     result.linesCleared = lines.rows.length + lines.cols.length;
     s.totalLines += result.linesCleared;
     const clearRes = applyClears(s.board, lines);
     result.clearedCells = clearRes.clearedCells;
     result.crackedCells = clearRes.cracked;
+
+    // a clear through a wild zone consumes that wild
+    if (result.linesCleared > 0 && s.aux.wilds.length > 0) {
+      const lineCells = new Set<number>();
+      for (const r of lines.rows) for (let c = 0; c < BOARD_SIZE; c++) lineCells.add(idx(c, r));
+      for (const c of lines.cols) for (let r = 0; r < BOARD_SIZE; r++) lineCells.add(idx(c, r));
+      s.aux.wilds = s.aux.wilds.filter(
+        (center) => ![...wildAura([center])].some((cell) => lineCells.has(cell)),
+      );
+    }
 
     for (const bombIdx of clearRes.bombs) {
       result.explodedCells.push(...explodeBomb(s.board, s.aux, bombIdx));
@@ -224,7 +236,7 @@ export class Game {
       result.earned.push(this.randomPowerUp());
     }
 
-    if (result.linesCleared >= 3) grantWild(s.board, this.rng, s.touched);
+    if (result.linesCleared >= 3) grantWild(s.board, this.rng, s.touched, s.aux);
 
     tickPlacement(s.board, s.aux);
     this.updateTimeTargets(result);
@@ -398,7 +410,16 @@ export class Game {
       delete legacy.grace;
     }
     legacy.totalLines ??= 0;
-    (rest.aux as { times?: Record<number, number> }).times ??= {};
+    const aux = rest.aux as { times?: Record<number, number>; wilds?: number[] };
+    aux.times ??= {};
+    aux.wilds ??= [];
+    // legacy saves stored wilds as board cells — lift them into zones
+    for (let i = 0; i < board.length; i++) {
+      if (board[i] === CELL.WILD) {
+        board[i] = CELL.EMPTY;
+        aux.wilds.push(i);
+      }
+    }
     game.state = {
       ...rest,
       board: new Uint8Array(board),

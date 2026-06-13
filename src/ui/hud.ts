@@ -18,6 +18,10 @@ const CSS = `
   .gl-score-wrap { text-align: center; }
   .gl-score { font-family: 'Bungee', 'Quicksand', sans-serif; font-size: 28px; line-height: 1; letter-spacing: 1px; text-shadow: 0 3px 0 var(--gl-shadow); }
   .gl-high { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; opacity: 0.55; margin-top: 3px; }
+  .gl-level { display: flex; align-items: center; gap: 6px; justify-content: center; margin-top: 4px; }
+  .gl-level .lv { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--gl-amber); }
+  .gl-level .bar { width: 72px; height: 5px; border-radius: 3px; background: rgba(128,128,128,0.25); overflow: hidden; }
+  .gl-level .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gl-amber), var(--gl-coral)); border-radius: 3px; transition: width 0.4s; }
   .gl-flame { font-size: 14px; font-weight: 700; min-width: 64px; text-align: center; transition: opacity 0.4s; pointer-events: auto;
     background: linear-gradient(180deg, rgba(255,120,73,0.22), rgba(255,209,102,0.12)); border: 1px solid rgba(255,150,80,0.35);
     border-radius: 999px; padding: 5px 11px; }
@@ -188,6 +192,7 @@ export class Hud {
         <div class="gl-score-wrap">
           <div class="gl-score" id="gl-score">0</div>
           <div class="gl-high" id="gl-high"></div>
+          <div class="gl-level"><span class="lv" id="gl-level-label">LV 1</span><span class="bar"><i id="gl-level-fill"></i></span></div>
         </div>
         <div class="gl-flame" id="gl-flame"></div>
       </div>
@@ -239,6 +244,8 @@ export class Hud {
             It survives two placements without a clear — the flame dims as it cools.
             When the screen edges glow warm, your streak is hot (×2.5+).</li>
             <li>✨ Emptying the entire board: +300 Perfect Clear</li>
+            <li>⬆️ Every 10 cleared lines you <b>level up</b> — watch your blocks evolve from flat
+            to glossy to gleaming neon.</li>
           </ul>
           <h3>Special cells <span style="font-weight:400;opacity:.7">(appear as you play)</span></h3>
           <ul>
@@ -247,7 +254,9 @@ export class Hud {
             <li>💣 <b>Bomb</b> — the number counts your placements. Clear its line in time and it
             blasts a 3×3 area free; let it hit 0 and it petrifies…</li>
             <li>🪨 <b>Stone</b> — can't be cleared. Crumbles by itself after 15 placements.</li>
-            <li>🌈 <b>Wild</b> — earned by a 3-line clear; helps complete both its row and its column.</li>
+            <li>🌈 <b>Wild zone</b> — earned by a 3-line clear. Its rainbow cross never blocks
+            your pieces but counts as filled when completing lines — clear through it for an easy
+            big clear. One clear uses it up.</li>
             <li>⏱ <b>Time target</b> <span style="opacity:.7">(Rush only)</span> — a glowing ring marks a block worth bonus seconds; clear its line in time to bank them.</li>
           </ul>
           <h3>Power-ups <span style="font-weight:400;opacity:.7">(bottom bar, one use each per game)</span></h3>
@@ -347,6 +356,12 @@ export class Hud {
     }
     flame.textContent = `🔥 ×${multiplier}`;
     flame.style.opacity = ['1', '0.65', '0.35'][Math.min(misses, 2)];
+  }
+
+  /** Level ladder: every 10 lines levels you up and evolves the block material. */
+  setLevel(level: number, progress: number): void {
+    this.el('gl-level-label').textContent = `LV ${level + 1}`;
+    this.el('gl-level-fill').style.width = `${Math.round(progress * 100)}%`;
   }
 
   setRushTime(secondsLeft: number | null): void {

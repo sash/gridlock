@@ -1,7 +1,6 @@
 import { Application } from 'pixi.js';
 import { GameApp } from './ui/app';
 import { getTheme } from './ui/theme';
-import { loadFruitTextures } from './ui/fruits';
 
 declare global {
   interface Window {
@@ -46,7 +45,6 @@ async function boot(): Promise<void> {
   });
   document.getElementById('app')!.appendChild(app.canvas);
 
-  await loadFruitTextures();
   window.__game = new GameApp(app);
 
   const inNativeShell = typeof (window as { ReactNativeWebView?: unknown }).ReactNativeWebView !== 'undefined';
