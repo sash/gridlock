@@ -95,12 +95,3 @@ export function dismissInstallHint(): void {
   write('installHintDismissed', true);
 }
 
-// --- cosmetic theme ---
-
-export function getThemeId(): string | null {
-  return read<string>('theme');
-}
-
-export function setThemeId(id: string): void {
-  write('theme', id);
-}

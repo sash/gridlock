@@ -1,7 +1,7 @@
 import { Application } from 'pixi.js';
 import { GameApp } from './ui/app';
 import { getTheme } from './ui/theme';
-import { getThemeId } from './ui/storage';
+import { loadFruitTextures } from './ui/fruits';
 
 declare global {
   interface Window {
@@ -39,11 +39,14 @@ async function boot(): Promise<void> {
     resolution: Math.min(window.devicePixelRatio || 1, 2), // DPR 3 is wasted battery on flat shapes
     autoDensity: true,
     antialias: true,
-    background: getTheme(getThemeId()).background,
+    background: getTheme(
+      window.matchMedia('(prefers-color-scheme: light)').matches ? 'paper' : 'night',
+    ).background,
     preference: 'webgl', // WebGL2 with automatic WebGL1 fallback
   });
   document.getElementById('app')!.appendChild(app.canvas);
 
+  await loadFruitTextures();
   window.__game = new GameApp(app);
 
   const inNativeShell = typeof (window as { ReactNativeWebView?: unknown }).ReactNativeWebView !== 'undefined';

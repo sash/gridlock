@@ -1,4 +1,5 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { fruitTexture } from './fruits';
 import { BOARD_SIZE, CELL, idx, type Board, type Lines } from '../core/board';
 import { getPiece } from '../core/pieces';
 import type { SpecialsState } from '../core/specials';
@@ -8,6 +9,17 @@ const GAP = 2;
 
 function drawCell(g: Graphics, x: number, y: number, size: number, color: number, alpha = 1): void {
   g.roundRect(x + GAP, y + GAP, size - GAP * 2, size - GAP * 2, size * 0.18).fill({ color, alpha });
+}
+
+/** Fruit sprite for a block, centered on the cell. Falls back to nothing pre-load. */
+function fruitSprite(color: number, stage: number, cx: number, cy: number, cellSize: number): Sprite | null {
+  const tex = fruitTexture(color, stage);
+  if (!tex) return null;
+  const sprite = new Sprite(tex);
+  sprite.anchor.set(0.5);
+  sprite.position.set(cx, cy);
+  sprite.width = sprite.height = cellSize * 0.72;
+  return sprite;
 }
 
 /** The 8×8 grid: cells, special glyphs, ghost preview, glow and pulse layers. */
@@ -44,7 +56,7 @@ export class BoardView {
     };
   }
 
-  render(board: Board, aux: SpecialsState): void {
+  render(board: Board, aux: SpecialsState, stage = 0): void {
     const cs = this.cellSize;
     const g = this.cells;
     g.clear();
@@ -58,6 +70,8 @@ export class BoardView {
           drawCell(g, x, y, cs, this.theme.emptyCell);
         } else if (v >= 1 && v <= 8) {
           drawCell(g, x, y, cs, this.theme.colors[v - 1]);
+          const sprite = fruitSprite(v, stage, x + cs / 2, y + cs / 2, cs);
+          if (sprite) this.glyphs.addChild(sprite);
         } else {
           drawCell(g, x, y, cs, SPECIAL_COLORS[v] ?? 0x888888);
           const glyph = new Text({
@@ -168,22 +182,26 @@ export class TrayView {
     return Math.min((this.slotWidth * 0.82) / maxSpan, this.height * 0.8 / maxSpan);
   }
 
-  render(tray: ReadonlyArray<string | null>, hiddenSlot: number | null): void {
+  render(tray: ReadonlyArray<string | null>, hiddenSlot: number | null, stage = 0): void {
     this.slots.forEach((slot, i) => {
       slot.removeChildren();
       const id = tray[i];
       if (!id || i === hiddenSlot) return;
       const piece = getPiece(id);
       const cs = this.trayCellSize(id);
+      const wrap = new Container();
       const g = new Graphics();
+      wrap.addChild(g);
       for (const [c, r] of piece.cells) {
         drawCell(g, c * cs, r * cs, cs, this.theme.colors[piece.color - 1]);
+        const sprite = fruitSprite(piece.color, stage, (c + 0.5) * cs, (r + 0.5) * cs, cs);
+        if (sprite) wrap.addChild(sprite);
       }
-      g.position.set(
+      wrap.position.set(
         (this.slotWidth - piece.w * cs) / 2,
         (this.height - piece.h * cs) / 2,
       );
-      slot.addChild(g);
+      slot.addChild(wrap);
     });
   }
 

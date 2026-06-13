@@ -19,7 +19,7 @@ function stampServiceWorker(): Plugin {
 
 export default defineConfig({
   base: './',
-  build: { target: 'es2022' },
+  build: { target: 'es2022', assetsInlineLimit: 32768 },
   plugins: [stampServiceWorker()],
   server: { host: true },
   test: {

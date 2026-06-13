@@ -17,6 +17,8 @@ test('loads the app with a rendered canvas and menu', async ({ page }) => {
   await expect(page.locator('[data-mode="classic"]')).toBeVisible();
   await expect(page.locator('#gl-overlay-menu .gl-logo .row').first()).toContainText('GRID');
   await expect(page.locator('#gl-overlay-menu .gl-logo .row').last()).toContainText('LOCK');
+  // first launch: no game selected yet → the menu is not escapable
+  await expect(page.locator('#gl-menu-close')).toBeHidden();
 });
 
 test('menu explains modes and help overlay explains bonuses and power-ups', async ({ page }) => {
@@ -165,6 +167,22 @@ test('non-iOS browsers never see the install hint', async ({ page }) => {
   await expect(page.locator('#gl-install')).toBeHidden();
 });
 
+test('theme follows the system color scheme (light → Paper, dark → Night)', async ({ browser }) => {
+  for (const [scheme, bg] of [
+    ['light', 'rgb(242, 237, 228)'],
+    ['dark', 'rgb(16, 19, 26)'],
+  ] as const) {
+    const ctx = await browser.newContext({ colorScheme: scheme });
+    const page = await ctx.newPage();
+    await page.goto('http://localhost:5180/');
+    await page.waitForSelector('.gl-logo');
+    expect(await page.evaluate(() => document.body.style.background)).toContain(bg);
+    // the old theme picker is gone
+    await expect(page.locator('[data-theme]')).toHaveCount(0);
+    await ctx.close();
+  }
+});
+
 test('document root background tracks overlays (iOS standalone bottom strip)', async ({ page }) => {
   await page.goto('/');
   // menu open → root painted overlay-dark
@@ -235,7 +253,11 @@ test('tapping a special brick explains it; menu offers New game mid-game', async
   });
   await page.mouse.click(origin.x + origin.cs / 2, origin.y + origin.cs / 2);
   await expect(page.locator('#gl-toast')).toContainText('Gem');
-  // ☰ menu mid-game offers New game
+  // ☰ menu mid-game offers New game and can be closed in place
+  await page.click('#gl-menu-btn');
+  await expect(page.locator('#gl-menu-close')).toBeVisible();
+  await page.click('#gl-menu-close');
+  await expect(page.locator('#gl-overlay-menu')).toBeHidden();
   await page.click('#gl-menu-btn');
   const newGame = page.locator('#gl-newgame-btn');
   await expect(newGame).toBeVisible();

@@ -38,6 +38,8 @@ export interface GameState {
   score: number;
   streak: number;
   misses: number;
+  /** Lifetime line clears this game — drives the evolving block skin. */
+  totalLines: number;
   seed: number;
   rngState: number;
   dealNumber: number;
@@ -89,6 +91,7 @@ export class Game {
       score: 0,
       streak: 0,
       misses: 0,
+      totalLines: 0,
       seed: opts.seed,
       rngState: 0,
       dealNumber: 1,
@@ -174,6 +177,7 @@ export class Game {
     const lines = findCompletedLines(s.board);
     result.lines = lines;
     result.linesCleared = lines.rows.length + lines.cols.length;
+    s.totalLines += result.linesCleared;
     const clearRes = applyClears(s.board, lines);
     result.clearedCells = clearRes.clearedCells;
     result.crackedCells = clearRes.cracked;
@@ -344,11 +348,12 @@ export class Game {
     const game = Object.create(Game.prototype) as Game;
     const { board, ...rest } = structuredClone(data);
     // migrate saves from the old one-placement-grace format
-    const legacy = rest as { grace?: boolean; misses?: number };
+    const legacy = rest as { grace?: boolean; misses?: number; totalLines?: number };
     if (legacy.misses === undefined) {
       legacy.misses = legacy.grace ? 1 : 0;
       delete legacy.grace;
     }
+    legacy.totalLines ??= 0;
     game.state = { ...rest, board: new Uint8Array(board) };
     (game as unknown as { rng: Rng }).rng = new Rng(0);
     (game as unknown as { rng: Rng }).rng.setState(data.rngState);

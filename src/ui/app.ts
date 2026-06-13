@@ -1,4 +1,5 @@
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
+import { fruitTexture } from './fruits';
 import { Game, type Mode, type PlaceResult, type PowerUpKind } from '../core/game';
 import { BOARD_SIZE, CELL } from '../core/board';
 import { getPiece } from '../core/pieces';
@@ -42,7 +43,7 @@ const SPECIAL_TAP_INFO: Record<number, string> = {
 interface DragState {
   slot: number;
   pieceId: string;
-  gfx: Graphics;
+  gfx: Container;
   col: number;
   row: number;
   valid: boolean;
@@ -66,7 +67,10 @@ export class GameApp {
   private trayOrigin = { x: 0, y: 0 };
 
   constructor(private app: Application) {
-    this.theme = getTheme(storage.getThemeId());
+    // theme follows the OS color scheme: light → Paper, otherwise Night
+    const lightScheme = window.matchMedia('(prefers-color-scheme: light)');
+    this.theme = getTheme(lightScheme.matches ? 'paper' : 'night');
+    lightScheme.addEventListener('change', (e) => this.setTheme(e.matches ? 'paper' : 'night'));
     this.stage = app.stage;
     this.board = new BoardView(this.theme);
     this.tray = new TrayView(this.theme);
@@ -78,9 +82,12 @@ export class GameApp {
       onSelectMode: (m) => this.startMode(m),
       onPowerUp: (k) => this.handlePowerUp(k),
       onMenu: () => this.toMenu(),
+      onCloseMenu: () => {
+        this.hud.hideOverlays();
+        this.refresh();
+      },
       onRestart: () => this.restart(),
       onShare: () => this.share(),
-      onTheme: (id) => this.setTheme(id),
     });
     this.hud.applyTheme(this.theme);
 
@@ -191,11 +198,11 @@ export class GameApp {
     const g = this.game;
     // Daily is one attempt per day — no mid-game restart there
     const canRestart = !!g && !g.state.over && g.state.mode !== 'daily';
-    this.hud.showMenu(canRestart ? `🔁 New game (${g!.state.mode})` : null);
+    const closable = !!g && !g.state.over;
+    this.hud.showMenu(canRestart ? `🔁 New game (${g!.state.mode})` : null, closable);
   }
 
   private setTheme(id: string): void {
-    storage.setThemeId(id);
     this.theme = getTheme(id);
     // the canvas covers the page — its clear color must follow the theme too
     this.app.renderer.background.color = this.theme.background;
@@ -261,8 +268,8 @@ export class GameApp {
   private refresh(): void {
     const g = this.game;
     if (!g) return;
-    this.board.render(g.state.board, g.state.aux);
-    this.tray.render(g.state.tray, this.drag?.slot ?? null);
+    this.board.render(g.state.board, g.state.aux, g.state.totalLines);
+    this.tray.render(g.state.tray, this.drag?.slot ?? null, g.state.totalLines);
     // Zen has no leaderboard per spec §6 — never show or track a best score
     this.hud.setScore(g.state.score, g.state.mode === 'zen' ? 0 : storage.getHighScore(g.state.mode));
     this.hud.setStreak(g.state.streak, g.state.misses, streakMultiplier(g.state.streak));
@@ -340,17 +347,27 @@ export class GameApp {
     }
 
     const pieceId = g.state.tray[slot]!;
-    const gfx = new Graphics();
+    const gfx = new Container();
+    const shape = new Graphics();
+    gfx.addChild(shape);
     const piece = getPiece(pieceId);
     const cs = this.board.cellSize;
     for (const [c, r] of piece.cells) {
-      gfx
+      shape
         .roundRect(c * cs + 2, r * cs + 2, cs - 4, cs - 4, cs * 0.18)
         .fill(this.theme.colors[piece.color - 1]);
+      const tex = fruitTexture(piece.color, g.state.totalLines);
+      if (tex) {
+        const sprite = new Sprite(tex);
+        sprite.anchor.set(0.5);
+        sprite.position.set((c + 0.5) * cs, (r + 0.5) * cs);
+        sprite.width = sprite.height = cs * 0.72;
+        gfx.addChild(sprite);
+      }
     }
     this.stage.addChild(gfx);
     this.drag = { slot, pieceId, gfx, col: -1, row: -1, valid: false };
-    this.tray.render(g.state.tray, slot);
+    this.tray.render(g.state.tray, slot, g.state.totalLines);
     this.moveDrag(e);
   }
 
@@ -392,10 +409,10 @@ export class GameApp {
 
   private cancelDrag(): void {
     if (this.drag) {
-      this.drag.gfx.destroy();
+      this.drag.gfx.destroy({ children: true });
       this.drag = null;
       this.board.clearGhost();
-      if (this.game) this.tray.render(this.game.state.tray, null);
+      if (this.game) this.tray.render(this.game.state.tray, null, this.game.state.totalLines);
     }
   }
 

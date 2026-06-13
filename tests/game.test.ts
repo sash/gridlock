@@ -68,6 +68,16 @@ describe('placement', () => {
     expect(g.state.streak).toBe(0);
   });
 
+  test('totalLines accumulates across clears (drives the fruit skin stage)', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    expect(g.state.totalLines).toBe(0);
+    fillRowExcept(g, 0, 7);
+    g.state.board[idx(0, 7)] = 1; // avoid perfect clear
+    g.place(0, 7, 0);
+    expect(g.state.totalLines).toBe(1);
+  });
+
   test('a new tray of 3 is dealt after all 3 are placed', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];

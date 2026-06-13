@@ -8,6 +8,7 @@ export default defineConfig({
   build: {
     target: 'es2022',
     outDir: 'dist-native',
+    assetsInlineLimit: 32768, // fruit sprites must inline into the single file
   },
   plugins: [viteSingleFile()],
   define: {

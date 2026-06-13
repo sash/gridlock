@@ -1,5 +1,5 @@
 import type { Mode, PowerUpKind } from '../core/game';
-import { THEMES, type Theme } from './theme';
+import { type Theme } from './theme';
 import type { Inventory } from './storage';
 
 const CSS = `
@@ -89,7 +89,9 @@ const CSS = `
 
   /* mode tiles */
   .gl-overlay .gl-btn { font-size: 17px; padding: 13px 18px; width: min(320px, 86vw); background: var(--gl-panel); }
-  .gl-themes .gl-btn, #gl-help-close { width: auto; }
+  #gl-help-close { width: auto; }
+  /* mirrors the ☰ button's position so closing feels like toggling it */
+  .gl-overlay .gl-btn.gl-menu-close { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 14px; width: auto; min-width: 0; padding: 8px 13px; }
   .gl-overlay .gl-btn.primary { text-align: left; display: flex; flex-direction: column; gap: 2px; position: relative; padding-left: 26px; overflow: hidden; }
   .gl-overlay .gl-btn.primary::before { content: ''; position: absolute; left: 10px; top: 12px; bottom: 12px; width: 6px; border-radius: 4px; background: var(--accent, var(--gl-blue)); box-shadow: 0 0 10px var(--accent, var(--gl-blue)); }
   .gl-overlay .gl-btn.primary > b { font-family: 'Bungee', sans-serif; font-weight: 400; font-size: 16px; letter-spacing: 0.5px; }
@@ -109,9 +111,6 @@ const CSS = `
   .gl-help-body p, .gl-help-body li { margin: 5px 0; opacity: 0.92; }
   .gl-help-body ul { margin: 0; padding-left: 4px; list-style: none; }
 
-  .gl-themes { display: flex; gap: 8px; margin-top: 4px; }
-  .gl-themes .gl-btn { min-width: 0; font-size: 14px; }
-  .gl-themes .gl-btn.active { outline: 2px solid var(--gl-amber); }
 
   /* ---------- feedback ---------- */
   .gl-glow { position: fixed; inset: 0; height: 100vh; height: 100lvh; height: var(--gl-screen-h, 100lvh); pointer-events: none; opacity: 0; transition: opacity 0.5s; box-shadow: inset 0 0 70px 14px var(--gl-coral); }
@@ -162,9 +161,9 @@ export interface HudCallbacks {
   onSelectMode(mode: Mode): void;
   onPowerUp(kind: PowerUpKind): void;
   onMenu(): void;
+  onCloseMenu(): void;
   onRestart(): void;
   onShare(): void;
-  onTheme(id: string): void;
 }
 
 export class Hud {
@@ -209,6 +208,7 @@ export class Hud {
       <div class="gl-cheer" id="gl-cheer"></div>
       <div class="gl-toast" id="gl-toast"></div>
       <div class="gl-overlay" id="gl-overlay-menu">
+        <button class="gl-btn gl-menu-close hidden" id="gl-menu-close" aria-label="Close menu">✕</button>
         <div class="gl-logo" aria-label="GridLock">
           <div class="row">
             <span class="tile" style="background:var(--gl-amber)">G</span><span class="tile" style="background:var(--gl-cyan)">R</span><span class="tile" style="background:var(--gl-pink)">I</span><span class="tile" style="background:var(--gl-mint)">D</span>
@@ -224,9 +224,6 @@ export class Hud {
         ).join('')}
         <button class="gl-btn hidden" id="gl-newgame-btn">🔁 New game</button>
         <button class="gl-btn" id="gl-help-btn-menu">❓ How to play</button>
-        <div class="gl-themes" id="gl-themes">
-          ${THEMES.map((t) => `<button class="gl-btn" data-theme="${t.id}">${t.label}</button>`).join('')}
-        </div>
       </div>
       <div class="gl-overlay hidden" id="gl-overlay-help">
         <h2>How to play</h2>
@@ -274,6 +271,7 @@ export class Hud {
     parent.appendChild(this.root);
 
     this.el('gl-menu-btn').addEventListener('click', () => cb.onMenu());
+    this.el('gl-menu-close').addEventListener('click', () => cb.onCloseMenu());
     this.el('gl-newgame-btn').addEventListener('click', () => cb.onRestart());
     this.el('gl-flame').addEventListener('click', () => {
       if (this.el('gl-flame').textContent) {
@@ -291,9 +289,6 @@ export class Hud {
     this.el('gl-over-menu-btn').addEventListener('click', () => cb.onMenu());
     this.root.querySelectorAll<HTMLButtonElement>('[data-mode]').forEach((b) =>
       b.addEventListener('click', () => cb.onSelectMode(b.dataset.mode as Mode)),
-    );
-    this.root.querySelectorAll<HTMLButtonElement>('[data-theme]').forEach((b) =>
-      b.addEventListener('click', () => cb.onTheme(b.dataset.theme!)),
     );
     this.root.querySelectorAll<HTMLButtonElement>('[data-pu]').forEach((b) =>
       b.addEventListener('click', () => cb.onPowerUp(b.dataset.pu as PowerUpKind)),
@@ -331,9 +326,6 @@ export class Hud {
     this.root.style.setProperty('--gl-theme-panel', theme.panelCss);
     this.root.style.setProperty('--gl-theme-edge', theme.edgeCss);
     this.root.style.setProperty('--gl-theme-shadow', theme.shadowCss);
-    this.root
-      .querySelectorAll<HTMLButtonElement>('[data-theme]')
-      .forEach((b) => b.classList.toggle('active', b.dataset.theme === theme.id));
   }
 
   setScore(score: number, high: number): void {
@@ -392,12 +384,14 @@ export class Hud {
     dock.style.flexDirection = 'column';
   }
 
-  showMenu(restartLabel: string | null = null): void {
+  showMenu(restartLabel: string | null = null, closable = false): void {
     this.el('gl-overlay-menu').classList.remove('hidden');
     this.el('gl-overlay-over').classList.add('hidden');
     const btn = this.el('gl-newgame-btn');
     btn.classList.toggle('hidden', restartLabel === null);
     if (restartLabel !== null) btn.textContent = restartLabel;
+    // escapable whenever a game is in progress; locked only on first launch
+    this.el('gl-menu-close').classList.toggle('hidden', !closable);
     this.paintRoot();
   }
 
