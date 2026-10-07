@@ -7,7 +7,16 @@ export const BOMB_WARN_AT = 3;
 export const STONE_LIFETIME = 8; // placements before a stone crumbles
 export const GEM_EVERY_DEALS = 3;
 export const ICE_EVERY_DEALS = 5;
-export const ICE_MIN_SCORE = 4000;
+
+export type SpecialKind = 'gem' | 'wild' | 'bomb' | 'ice';
+/** Specials arrive one at a time with the level ladder (a level is LINES_PER_LEVEL cleared lines). */
+export const UNLOCK_LEVEL: Record<SpecialKind, number> = { gem: 2, wild: 3, bomb: 5, ice: 8 };
+export const SPECIAL_ORDER: readonly SpecialKind[] = ['gem', 'wild', 'bomb', 'ice'];
+
+/** Specials whose unlock level lies in (before, after]. */
+export function unlockedBetween(levelBefore: number, levelAfter: number): SpecialKind[] {
+  return SPECIAL_ORDER.filter((k) => UNLOCK_LEVEL[k] > levelBefore && UNLOCK_LEVEL[k] <= levelAfter);
+}
 /** Ice only forms in a row or column with at least this many filled cells. */
 const ICE_MIN_LINE_FILL = BOARD_SIZE / 2;
 export const BOMB_EVERY_DEALS = 10;
@@ -65,25 +74,26 @@ function randomCellWhere(
 const plainBlock = (v: number) => v >= 1 && v <= 8;
 
 /**
- * Spawn gem / ice / bomb at the start of a deal, per spec §5 spawn rules.
- * Specials take over blocks the player has already placed rather than empty
- * cells, so they never eat free space; `touched` is unused here and kept for
- * the wild zones, which do spawn on (non-blocking) empty cells.
+ * Spawn gem / ice / bomb at the start of a deal, per spec §5 spawn rules,
+ * each only once the player's level has unlocked it. Specials take over
+ * blocks the player has already placed rather than empty cells, so they
+ * never eat free space; `touched` is unused here and kept for the wild
+ * zones, which do spawn on (non-blocking) empty cells.
  */
 export function spawnOnDeal(
   board: Board,
   aux: SpecialsState,
   rng: Rng,
   dealNumber: number,
-  score: number,
+  level: number,
   touched?: Uint8Array | null,
 ): void {
   void touched;
-  if (dealNumber > 0 && dealNumber % GEM_EVERY_DEALS === 0) {
+  if (level >= UNLOCK_LEVEL.gem && dealNumber > 0 && dealNumber % GEM_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
     if (i >= 0) board[i] = CELL.GEM;
   }
-  if (score >= ICE_MIN_SCORE && dealNumber > 0 && dealNumber % ICE_EVERY_DEALS === 0) {
+  if (level >= UNLOCK_LEVEL.ice && dealNumber > 0 && dealNumber % ICE_EVERY_DEALS === 0) {
     // freeze a plain filled cell (not a special) in a line that's already
     // half built, so the ice is a target worth chasing rather than a dead weight
     const rowFill = new Array<number>(BOARD_SIZE).fill(0);
@@ -103,7 +113,7 @@ export function spawnOnDeal(
     );
     if (i >= 0) board[i] = CELL.ICE;
   }
-  if (dealNumber > 0 && dealNumber % BOMB_EVERY_DEALS === 0) {
+  if (level >= UNLOCK_LEVEL.bomb && dealNumber > 0 && dealNumber % BOMB_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
     if (i >= 0) {
       board[i] = CELL.BOMB;

@@ -11,6 +11,8 @@ import {
   wildAura,
   BOMB_FUSE,
   STONE_LIFETIME,
+  UNLOCK_LEVEL,
+  unlockedBetween,
 } from '../src/core/specials';
 
 function board(fill: (c: number, r: number) => boolean = () => false): Board {
@@ -24,38 +26,50 @@ describe('spawnOnDeal', () => {
     const b = board((c) => c < 4);
     const aux = createSpecialsState();
     const emptyBefore = [...b].filter((v) => v === CELL.EMPTY).length;
-    spawnOnDeal(b, aux, new Rng(1), 3, 0);
+    spawnOnDeal(b, aux, new Rng(1), 3, 10);
     const gems = [...b].filter((v) => v === CELL.GEM);
     expect(gems.length).toBe(1);
     expect([...b].filter((v) => v === CELL.EMPTY).length).toBe(emptyBefore);
-    spawnOnDeal(b, aux, new Rng(2), 4, 0);
+    spawnOnDeal(b, aux, new Rng(2), 4, 10);
     expect([...b].filter((v) => v === CELL.GEM).length).toBe(1); // not a 3rd deal
+  });
+
+  test('specials unlock with the level ladder: gem 2, wild 3, bomb 5, ice 8', () => {
+    expect(UNLOCK_LEVEL).toEqual({ gem: 2, wild: 3, bomb: 5, ice: 8 });
+    const b = board((c) => c < 4);
+    spawnOnDeal(b, createSpecialsState(), new Rng(1), 3, 1); // level 1: no gem yet
+    expect([...b].includes(CELL.GEM)).toBe(false);
+    spawnOnDeal(b, createSpecialsState(), new Rng(1), 10, 4); // level 4: no bomb yet
+    expect([...b].includes(CELL.BOMB)).toBe(false);
+    expect(unlockedBetween(1, 2)).toEqual(['gem']);
+    expect(unlockedBetween(2, 5)).toEqual(['wild', 'bomb']);
+    expect(unlockedBetween(5, 5)).toEqual([]);
   });
 
   test('no placed blocks → no gem (specials never eat free space)', () => {
     const b = board();
-    spawnOnDeal(b, createSpecialsState(), new Rng(1), 3, 0);
+    spawnOnDeal(b, createSpecialsState(), new Rng(1), 3, 10);
     expect([...b].every((v) => v === CELL.EMPTY)).toBe(true);
   });
 
-  test('ice spawns on a filled cell every 5th deal only from score 4000', () => {
+  test('ice spawns on a filled cell every 5th deal only from level 8', () => {
     const b = board((c) => c < 4);
     const aux = createSpecialsState();
-    spawnOnDeal(b, aux, new Rng(1), 5, 3999);
+    spawnOnDeal(b, aux, new Rng(1), 5, 7);
     expect([...b].includes(CELL.ICE)).toBe(false);
-    spawnOnDeal(b, aux, new Rng(1), 5, 4000);
+    spawnOnDeal(b, aux, new Rng(1), 5, 8);
     expect([...b].filter((v) => v === CELL.ICE).length).toBe(1);
   });
 
   test('ice only freezes cells in a row or column that is at least half full', () => {
     // scattered cells: no line holds 4 → no eligible cell
     const sparse = board((c, r) => c === r);
-    spawnOnDeal(sparse, createSpecialsState(), new Rng(1), 5, 5000);
+    spawnOnDeal(sparse, createSpecialsState(), new Rng(1), 5, 10);
     expect([...sparse].includes(CELL.ICE)).toBe(false);
     // row 2 has 4 filled cells, plus stray singles elsewhere
     for (let seed = 0; seed < 30; seed++) {
       const b = board((c, r) => (r === 2 && c < 4) || (c === 7 && r === 6));
-      spawnOnDeal(b, createSpecialsState(), new Rng(seed), 5, 5000);
+      spawnOnDeal(b, createSpecialsState(), new Rng(seed), 5, 10);
       const ice = [...b].findIndex((v) => v === CELL.ICE);
       expect(Math.floor(ice / 8), `seed ${seed}`).toBe(2);
     }
@@ -64,7 +78,7 @@ describe('spawnOnDeal', () => {
   test('bomb takes over a placed block every 10th deal with a fuse of 12', () => {
     const b = board((c, r) => c < 3 && r < 3);
     const aux = createSpecialsState();
-    spawnOnDeal(b, aux, new Rng(1), 10, 0);
+    spawnOnDeal(b, aux, new Rng(1), 10, 10);
     const bombIdx = [...b].findIndex((v) => v === CELL.BOMB);
     expect(bombIdx).toBeGreaterThanOrEqual(0);
     expect(bombIdx % 8).toBeLessThan(3); // one of the placed blocks
@@ -75,7 +89,7 @@ describe('spawnOnDeal', () => {
 
   test('no specials on a non-multiple deal', () => {
     const b = board((c) => c < 4);
-    spawnOnDeal(b, createSpecialsState(), new Rng(1), 7, 5000);
+    spawnOnDeal(b, createSpecialsState(), new Rng(1), 7, 10);
     expect([...b].every((v) => v === 0 || v === 1)).toBe(true);
   });
 });

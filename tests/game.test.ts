@@ -190,8 +190,9 @@ describe('placement', () => {
     expect(g.state.aux.stones[idx(2, 1)]).toBeUndefined();
   });
 
-  test('2-line clear grants a wild zone', () => {
+  test('2-line clear grants a wild zone once wilds are unlocked (level 3)', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.totalLines = 9; // level 3
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
     fillRowExcept(g, 0, 7);
     for (let r = 1; r < 8; r++) g.state.board[idx(7, r)] = 1;
@@ -201,8 +202,22 @@ describe('placement', () => {
     expect(g.state.aux.wilds.length).toBe(1);
   });
 
+  test('no wild zone before level 3, and the placement reports what it unlocked', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.totalLines = 4; // level 1
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    for (let r = 1; r < 8; r++) g.state.board[idx(7, r)] = 1;
+    g.state.board[idx(0, 5)] = 1;
+    const res = g.place(0, 7, 0)!;
+    expect(res.linesCleared).toBe(2); // → 6 lines = level 2
+    expect(g.state.aux.wilds.length).toBe(0);
+    expect(res.unlocked).toEqual(['gem']);
+  });
+
   test('3+ line clear grants a wild zone (board stays clear of it)', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.totalLines = 9;
     g.state.tray = ['SQ3_0', 'DOT_0', 'DOT_0'];
     for (const r of [0, 1, 2]) fillRowExcept(g, r, 0, 1, 2);
     const res = g.place(0, 0, 0)!;

@@ -373,3 +373,34 @@ test('iOS standalone: canvas, HUD and dock span the measured screen, not the sho
   expect(m.dockBottom).toBeGreaterThan(900); // sits at the real bottom, past the short viewport
   await ctx.close();
 });
+
+test('levelling into a new special shows its lesson card once, then a toast', async ({ page }, testInfo) => {
+  await startClassic(page);
+  const clearOneLine = () =>
+    page.evaluate(() => {
+      const g = window.__game!.game!;
+      for (let c = 0; c < 7; c++) g.state.board[c] = 1;
+      g.state.board[15] = 1; // keep col 7 from being empty → no perfect clear
+      g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+      window.__game!.placeAt(0, 7, 0);
+    });
+  // 5 lines = level 1; one more clear reaches level 2 → gems unlock
+  await page.evaluate(() => {
+    window.__game!.game!.state.totalLines = 5;
+  });
+  await clearOneLine();
+  const card = page.locator('#gl-overlay-intro');
+  await expect(card).toBeVisible({ timeout: 5000 });
+  await expect(card).toContainText('Gem');
+  await expect(card).toContainText('+150');
+  await page.screenshot({ path: testInfo.outputPath('intro-card.png') });
+  await page.click('#gl-intro-close');
+  await expect(card).toBeHidden();
+  // unlocking the same special again gets a toast, not the card
+  await page.evaluate(() => {
+    window.__game!.game!.state.totalLines = 5;
+  });
+  await clearOneLine();
+  await expect(page.locator('.gl-toast')).toContainText('Gems unlocked', { timeout: 5000 });
+  await expect(card).toBeHidden();
+});

@@ -86,7 +86,7 @@ Pure random feels unfair. Use a **weighted bag with a solvability check**:
 
 ## 5. Making It More Interesting — Special Cells
 
-These spawn on the board (not in pieces) and reward/punish *where* you clear, not just *that* you clear. Gems, ice and bombs **take over a block the player has already placed** — they never occupy an empty cell, so they add objectives without eating the free space that keeps the game controllable. (Wild zones sit on empty cells but never block placement.)
+These spawn on the board (not in pieces) and reward/punish *where* you clear, not just *that* you clear. They are **introduced one at a time by the level ladder** (a level = 3 cleared lines): gems at level 3, wild zones at level 4, bombs at level 6, ice at level 9 (levels as displayed; internally 2/3/5/8). The first time a special unlocks on a device, the level-up is followed by a lesson card explaining it; afterwards a toast announces the unlock. Gems, ice and bombs **take over a block the player has already placed** — they never occupy an empty cell, so they add objectives without eating the free space that keeps the game controllable. (Wild zones sit on empty cells but never block placement.)
 
 |Cell      |Spawn rule                                                     |Effect when its line clears                                                                                                                                  |
 |----------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|

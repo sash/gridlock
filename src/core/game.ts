@@ -15,11 +15,14 @@ import {
 } from './board';
 import { GEM_BONUS, PERFECT_CLEAR_BONUS, STREAK_MULTIPLIER_CAP, linePoints, streakMultiplier, updateStreak } from './scoring';
 import {
+  UNLOCK_LEVEL,
   createSpecialsState,
   explodeBomb,
   grantWild,
   shatterStones,
   spawnOnDeal,
+  type SpecialKind,
+  unlockedBetween,
   tickPlacement,
   wildAura,
   type SpecialsState,
@@ -41,8 +44,14 @@ export const HOLD_SLOT = 3;
 export const MAX_POWERUP_USES = 2;
 /** A random power-up is earned every this many cleared lines. */
 export const POWERUP_EVERY_LINES = 15;
-/** Clearing at least this many lines at once grants a wild zone. */
+/** Clearing at least this many lines at once grants a wild zone (once unlocked). */
 export const WILD_MIN_LINES = 2;
+/** Cleared lines per level; levels evolve the block skin and unlock specials. */
+export const LINES_PER_LEVEL = 3;
+
+export function levelFor(totalLines: number): number {
+  return Math.floor(totalLines / LINES_PER_LEVEL);
+}
 
 export interface GameState {
   mode: Mode;
@@ -101,6 +110,8 @@ export interface PlaceResult {
   timeGained: number;
   /** Power-ups earned this placement (streak cap, perfect clear). */
   earned: PowerUpKind[];
+  /** Specials whose unlock level this placement's clears reached. */
+  unlocked: SpecialKind[];
 }
 
 /** How a move that can leave the board stuck resolved it. */
@@ -239,6 +250,7 @@ export class Game {
       dissolvedRows: [],
       timeGained: 0,
       earned: [],
+      unlocked: [],
     };
 
     place(s.board, piece, col, row);
@@ -249,7 +261,9 @@ export class Game {
     const lines = findCompletedLines(s.board, aura);
     result.lines = lines;
     result.linesCleared = lines.rows.length + lines.cols.length;
+    const levelBefore = levelFor(s.totalLines);
     s.totalLines += result.linesCleared;
+    result.unlocked = unlockedBetween(levelBefore, levelFor(s.totalLines));
     const clearRes = applyClears(s.board, lines);
     result.clearedCells = clearRes.clearedCells;
     result.crackedCells = clearRes.cracked;
@@ -304,7 +318,9 @@ export class Game {
       result.earned.push(this.randomPowerUp());
     }
 
-    if (result.linesCleared >= WILD_MIN_LINES) grantWild(s.board, this.rng, s.touched, s.aux);
+    if (result.linesCleared >= WILD_MIN_LINES && levelFor(s.totalLines) >= UNLOCK_LEVEL.wild) {
+      grantWild(s.board, this.rng, s.touched, s.aux);
+    }
 
     tickPlacement(s.board, s.aux);
     this.updateTimeTargets(result);
@@ -364,7 +380,7 @@ export class Game {
     s.dealNumber++;
     s.dealsSinceClear = s.clearedThisDeal ? 0 : s.dealsSinceClear + 1;
     s.clearedThisDeal = false;
-    spawnOnDeal(s.board, s.aux, this.rng, s.dealNumber, s.score, s.touched);
+    spawnOnDeal(s.board, s.aux, this.rng, s.dealNumber, levelFor(s.totalLines), s.touched);
     s.tray = dealTray(s.board, this.rng, s.dealsSinceClear);
   }
 

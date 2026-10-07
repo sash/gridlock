@@ -85,6 +85,16 @@ export function setDailyResult(key: string, score: number, card: string): void {
   write(`daily.${key}`, { score, card });
 }
 
+// --- one-time lessons (special-cell intro cards, the hold tip) ---
+
+/** True the first time a lesson is marked on this device; false if it was seen before. */
+export function markIntroSeen(key: string): boolean {
+  const seen = read<string[]>('introSeen') ?? [];
+  if (seen.includes(key)) return false;
+  write('introSeen', [...seen, key]);
+  return true;
+}
+
 // --- add-to-home-screen hint (iOS browser only) ---
 
 export function isInstallHintDismissed(): boolean {

@@ -1,7 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import { STONE_LIFETIME, wildAura } from '../core/specials';
+import { STONE_LIFETIME, wildAura, type SpecialKind } from '../core/specials';
 import { drawBlock } from './views';
-import { Game, HOLD_SLOT, type Mode, type PlaceResult, type PowerUpKind, type StuckOutcome } from '../core/game';
+import { Game, HOLD_SLOT, LINES_PER_LEVEL, levelFor, type Mode, type PlaceResult, type PowerUpKind, type StuckOutcome } from '../core/game';
 import { BOARD_SIZE, CELL } from '../core/board';
 import { getPiece } from '../core/pieces';
 import { streakMultiplier } from '../core/scoring';
@@ -15,7 +15,6 @@ import { screenHeight } from './viewport';
 
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
-const LINES_PER_LEVEL = 3; // levels come fast; blocks reach the top material by ~12 lines
 const BLAST_SHAKE_S = 0.4;
 const RESCUE_SHAKE_S = 0.5;
 
@@ -26,15 +25,13 @@ function nativeHaptic(kind: 'place' | 'clear' | 'big-clear' | 'perfect' | 'game-
   bridge?.postMessage(JSON.stringify({ type: 'haptic', kind }));
 }
 
-/** Shown once, the first time each special cell ever appears on the board. */
-const SPECIAL_INTROS: Array<[number, string]> = [
-  [CELL.GEM, '💎 A gem! Clear its line for +150'],
-  [CELL.ICE, '🧊 Ice! It takes two clears to remove'],
-  [CELL.BOMB, '💣 A bomb! Clear its line before the counter hits 0'],
-  [CELL.STONE, `🪨 Petrified! Clear a line through or beside it to shatter it — or it crumbles in ${STONE_LIFETIME} placements`],
-];
-const WILD_INTRO = '🌈 Wild zone earned! Its cross counts as filled for clears but never blocks you';
 const HOLD_INTRO = '📥 Tip: drag a piece onto HOLD to save it for later';
+const UNLOCK_TOAST: Record<SpecialKind, string> = {
+  gem: '💎 Gems unlocked — clear their line for +150',
+  wild: '🌈 Wild zones unlocked — clear 2 lines at once to earn one',
+  bomb: '💣 Bombs unlocked — clear their line before the counter hits 0',
+  ice: '🧊 Ice unlocked — it takes two clears',
+};
 
 /** Shown when the player taps a special brick on the board. */
 const SPECIAL_TAP_INFO: Record<number, string> = {
@@ -285,7 +282,7 @@ export class GameApp {
     this.board.render(g.state.board, g.state.aux, this.levelTier());
     this.renderTray();
     this.hud.setLevel(
-      Math.floor(g.state.totalLines / LINES_PER_LEVEL),
+      levelFor(g.state.totalLines),
       (g.state.totalLines % LINES_PER_LEVEL) / LINES_PER_LEVEL,
     );
     // Zen has no leaderboard per spec §6 — never show or track a best score
@@ -504,15 +501,17 @@ export class GameApp {
       this.audio.clear(result.linesCleared, g.state.streak);
       this.audio.cheer(result.linesCleared);
       this.celebrate(result.linesCleared, g.state.streak);
-      const before = Math.floor((g.state.totalLines - result.linesCleared) / LINES_PER_LEVEL);
-      const after = Math.floor(g.state.totalLines / LINES_PER_LEVEL);
+      const before = levelFor(g.state.totalLines - result.linesCleared);
+      const after = levelFor(g.state.totalLines);
       if (after > before) {
+        const unlocked = result.unlocked;
         setTimeout(() => {
-          this.hud.cheer(`LEVEL ${after + 1}!`, '✨ your blocks evolve', '#ffd166');
+          this.hud.cheer(`LEVEL ${after + 1}!`, unlocked.length ? '✨ something new…' : '✨ your blocks evolve', '#ffd166');
           this.audio.perfectClear();
           this.audio.say(`Level ${after + 1}!`);
           this.refresh();
         }, 750);
+        if (unlocked.length) setTimeout(() => this.introduceUnlocked(unlocked), 1600);
       }
       this.particles.burst(
         [...result.clearedCells, ...result.shatteredCells],
@@ -546,7 +545,7 @@ export class GameApp {
     if (g.state.mode !== 'zen') storage.setHighScore(g.state.mode, g.state.score);
     this.persist();
     this.refresh();
-    this.introduceSpecials();
+    this.introduceHold();
     if (result.gameOver) this.finishGame();
     return result;
   }
@@ -609,33 +608,32 @@ export class GameApp {
     this.audio.say(text.replace(/!+/g, '!'));
   }
 
-  /** One-time explainer toast when a special cell type shows up for the first time. */
-  private introduceSpecials(): void {
+  /**
+   * A level-up just unlocked new specials: the first time ever on this device
+   * each gets a lesson card (one after another); later games get a toast.
+   */
+  private introduceUnlocked(kinds: SpecialKind[]): void {
+    const [kind, ...rest] = kinds;
+    if (!kind) return;
+    const next = () => this.introduceUnlocked(rest);
+    if (storage.markIntroSeen(kind)) {
+      this.cancelDrag();
+      this.audio.powerUp();
+      this.hud.showIntro(kind, () => {
+        this.refresh();
+        next();
+      });
+    } else {
+      this.hud.toast(UNLOCK_TOAST[kind], 3000);
+      next();
+    }
+  }
+
+  /** One-time tip once the player has seen a second deal. */
+  private introduceHold(): void {
     const g = this.game;
-    if (!g) return;
-    let seen: number[];
-    try {
-      seen = JSON.parse(localStorage.getItem('gridlock.seenSpecials') ?? '[]') as number[];
-    } catch {
-      seen = [];
-    }
-    // the hold tip piggybacks on the special-intro ledger with a sentinel key
-    const HOLD_TIP = -1;
-    const intros: Array<[number, string]> = [...SPECIAL_INTROS];
-    if (g.state.aux.wilds.length > 0) intros.push([CELL.WILD, WILD_INTRO]);
-    if (g.state.dealNumber >= 2) intros.push([HOLD_TIP, HOLD_INTRO]);
-    for (const [cell, message] of intros) {
-      if (seen.includes(cell)) continue;
-      if (cell !== CELL.WILD && cell !== HOLD_TIP && !g.state.board.includes(cell)) continue;
-      this.hud.toast(message, 3200);
-      seen.push(cell);
-      try {
-        localStorage.setItem('gridlock.seenSpecials', JSON.stringify(seen));
-      } catch {
-        // storage unavailable — they'll see the toast again next time
-      }
-      break; // one lesson at a time
-    }
+    if (!g || g.state.dealNumber < 2) return;
+    if (storage.markIntroSeen('hold')) this.hud.toast(HOLD_INTRO, 3200);
   }
 
   private finishGame(): void {

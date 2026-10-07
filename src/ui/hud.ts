@@ -1,4 +1,5 @@
-import { MAX_POWERUP_USES, POWERUP_EVERY_LINES, type Mode, type PowerUpKind } from '../core/game';
+import { LINES_PER_LEVEL, MAX_POWERUP_USES, POWERUP_EVERY_LINES, type Mode, type PowerUpKind } from '../core/game';
+import { UNLOCK_LEVEL, type SpecialKind } from '../core/specials';
 import { type Theme } from './theme';
 import type { Inventory } from './storage';
 
@@ -106,6 +107,17 @@ const CSS = `
   [data-mode="rush"] { --accent: var(--gl-coral); }
   [data-mode="zen"] { --accent: var(--gl-mint); }
   .gl-mode-desc { display: block; font-size: 12px; font-weight: 600; opacity: 0.6; }
+  /* ---------- special-cell intro ---------- */
+  .gl-intro-card { background: var(--gl-panel); border: 1px solid var(--gl-edge); border-radius: 22px; padding: 26px 24px 22px; max-width: 340px; width: 100%;
+    display: flex; flex-direction: column; align-items: center; gap: 12px; box-shadow: 0 10px 0 var(--gl-shadow); animation: gl-intro-pop 0.35s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes gl-intro-pop { from { transform: scale(0.7); opacity: 0; } to { transform: none; opacity: 1; } }
+  .gl-intro-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--gl-amber); }
+  .gl-intro-glyph { width: 84px; height: 84px; border-radius: 18px; display: grid; place-items: center; font-size: 46px; box-shadow: 0 5px 0 rgba(0,0,0,0.35); }
+  .gl-intro-card h2 { margin: 2px 0 0; font-family: 'Bungee', 'Quicksand', sans-serif; font-size: 26px; letter-spacing: 1px; }
+  .gl-intro-card p { margin: 0; font-size: 15px; line-height: 1.45; opacity: 0.9; }
+  .gl-intro-card .gl-btn { margin-top: 6px; }
+  @media (prefers-reduced-motion: reduce) { .gl-intro-card { animation: none; } }
+
   .gl-build { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); text-align: center; font-size: 10px; letter-spacing: 1px; opacity: 0.35; }
 
   /* help panel */
@@ -157,6 +169,34 @@ const PU_INFO: Record<PowerUpKind, { name: string; desc: string }> = {
   hammer: { name: 'Hammer', desc: 'Tap it, then tap any filled cell to smash it.' },
   undo: { name: 'Undo', desc: 'Take back your last placement (not after a clear).' },
 };
+/** What the intro card says the first time each special unlocks. */
+const SPECIAL_LESSONS: Record<SpecialKind, { glyph: string; name: string; color: string; how: string }> = {
+  gem: {
+    glyph: '💎',
+    name: 'Gem',
+    color: 'linear-gradient(135deg, #4cc9f0, #7ee7ff)',
+    how: 'Every few deals a gem takes over one of your blocks. Clear its row or column to collect +150 points.',
+  },
+  wild: {
+    glyph: '🌈',
+    name: 'Wild zone',
+    color: 'linear-gradient(135deg, #ef476f, #ffd166 40%, #06d6a0 70%, #4cc9f0)',
+    how: 'Clear 2 or more lines at once to earn one. Its rainbow cross never blocks your pieces, but counts as filled when completing a line — clear through it for an easy big clear. One clear uses it up.',
+  },
+  bomb: {
+    glyph: '💣',
+    name: 'Bomb',
+    color: 'linear-gradient(135deg, #ff7849, #ef476f)',
+    how: 'A bomb takes over a block and counts down your placements. Clear its line in time to blast a 5×5 area free — stone included. Let it reach 0 and it petrifies into 🪨 stone; clear a line through or beside stone to shatter it.',
+  },
+  ice: {
+    glyph: '🧊',
+    name: 'Ice',
+    color: 'linear-gradient(135deg, #a8e8ff, #ffffff)',
+    how: 'A block in a half-built line freezes over. Ice takes two clears: the first cracks it, the second removes it.',
+  },
+};
+
 const MODES: Array<{ mode: Mode; label: string; desc: string }> = [
   { mode: 'classic', label: 'Classic', desc: 'Endless — chase your high score' },
   { mode: 'daily', label: 'Daily Puzzle', desc: 'Same puzzle for everyone · one try per day · share your result' },
@@ -252,19 +292,19 @@ export class Hud {
             It survives three placements without a clear — the flame dims as it cools.
             When the screen edges glow warm, your streak is hot (×2.5+).</li>
             <li>✨ Emptying the entire board: +300 Perfect Clear</li>
-            <li>⬆️ Every 3 cleared lines you <b>level up</b> — watch your blocks evolve from flat
+            <li>⬆️ Every ${LINES_PER_LEVEL} cleared lines you <b>level up</b> — watch your blocks evolve from flat
             to glossy to gleaming neon.</li>
           </ul>
-          <h3>Special cells <span style="font-weight:400;opacity:.7">(appear as you play)</span></h3>
+          <h3>Special cells <span style="font-weight:400;opacity:.7">(unlock as you level up — each gets a lesson when it arrives)</span></h3>
           <ul>
-            <li>💎 <b>Gem</b> — clear its line for +150 points.</li>
-            <li>🧊 <b>Ice</b> — takes two clears: the first cracks it, the second removes it.</li>
-            <li>💣 <b>Bomb</b> — the number counts your placements. Clear its line in time and it
+            <li>💎 <b>Gem</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.gem + 1})</span> — takes over one of your blocks; clear its line for +150 points.</li>
+            <li>🧊 <b>Ice</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.ice + 1})</span> — takes two clears: the first cracks it, the second removes it.</li>
+            <li>💣 <b>Bomb</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.bomb + 1})</span> — the number counts your placements. Clear its line in time and it
             blasts a 5×5 area free — stone included, and nearby bombs go off too. It glows red in
             its last 3 placements; let it hit 0 and it petrifies…</li>
             <li>🪨 <b>Stone</b> — blocks your pieces. Clear a line through or right next to it to
             shatter it, or wait 8 placements for it to crumble.</li>
-            <li>🌈 <b>Wild zone</b> — earned by clearing 2+ lines at once. Its rainbow cross never blocks
+            <li>🌈 <b>Wild zone</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.wild + 1})</span> — earned by clearing 2+ lines at once. Its rainbow cross never blocks
             your pieces but counts as filled when completing lines — clear through it for an easy
             big clear. One clear uses it up.</li>
             <li>⏱ <b>Time target</b> <span style="opacity:.7">(Rush only)</span> — a glowing ring marks a block worth bonus seconds; clear its line in time to bank them.</li>
@@ -278,6 +318,15 @@ export class Hud {
           <p style="opacity:.75">Earn more by playing daily, every ${POWERUP_EVERY_LINES} lines cleared, reaching a ×5 streak, or landing a Perfect Clear.</p>
         </div>
         <button class="gl-btn primary" id="gl-help-close">Got it</button>
+      </div>
+      <div class="gl-overlay hidden" id="gl-overlay-intro">
+        <div class="gl-intro-card">
+          <div class="gl-intro-eyebrow" id="gl-intro-eyebrow">New special</div>
+          <div class="gl-intro-glyph" id="gl-intro-glyph"></div>
+          <h2 id="gl-intro-title"></h2>
+          <p id="gl-intro-text"></p>
+          <button class="gl-btn primary" id="gl-intro-close">Got it</button>
+        </div>
       </div>
       <div class="gl-overlay hidden" id="gl-overlay-over">
         <h2 id="gl-over-title">Game Over</h2>
@@ -325,7 +374,7 @@ export class Hud {
    * root in sync with whatever should cover the full screen right now.
    */
   private paintRoot(): void {
-    const anyOverlayOpen = ['gl-overlay-menu', 'gl-overlay-over', 'gl-overlay-help'].some(
+    const anyOverlayOpen = ['gl-overlay-menu', 'gl-overlay-over', 'gl-overlay-help', 'gl-overlay-intro'].some(
       (id) => !this.el(id).classList.contains('hidden'),
     );
     const html = document.documentElement.style;
@@ -449,6 +498,27 @@ export class Hud {
     this.el('gl-overlay-menu').classList.add('hidden');
     this.el('gl-overlay-over').classList.add('hidden');
     this.el('gl-overlay-help').classList.add('hidden');
+    this.el('gl-overlay-intro').classList.add('hidden');
+    this.paintRoot();
+  }
+
+  /** Level-up lesson: a card explaining a newly unlocked special cell. */
+  showIntro(kind: SpecialKind, onClose: () => void): void {
+    const info = SPECIAL_LESSONS[kind];
+    this.el('gl-intro-eyebrow').textContent = `Level ${UNLOCK_LEVEL[kind] + 1} · new special`;
+    const glyph = this.el('gl-intro-glyph');
+    glyph.textContent = info.glyph;
+    glyph.style.background = info.color;
+    this.el('gl-intro-title').textContent = info.name;
+    this.el('gl-intro-text').textContent = info.how;
+    const overlay = this.el('gl-overlay-intro');
+    overlay.classList.remove('hidden');
+    const btn = this.el('gl-intro-close') as HTMLButtonElement;
+    btn.onclick = () => {
+      overlay.classList.add('hidden');
+      this.paintRoot();
+      onClose();
+    };
     this.paintRoot();
   }
 
