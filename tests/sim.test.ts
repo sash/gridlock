@@ -3,7 +3,7 @@
  * specials) against candidate piece catalogs and reports how long games last.
  *
  *   SIM=1 npx vitest run tests/sim.test.ts
- *   SIM=1 SIM_GAMES=2000 npx vitest run tests/sim.test.ts
+ *   SIM=1 SIM_GAMES=2000 SIM_ONLY=dealer SIM_OUT=/tmp/sim.txt npx vitest run tests/sim.test.ts
  */
 import { describe, expect, test } from 'vitest';
 import { Rng } from '../src/core/rng';
@@ -18,7 +18,7 @@ import {
   type Board,
 } from '../src/core/board';
 import { SHAPE_DEFS, buildCatalog, type Piece, type ShapeDef } from '../src/core/pieces';
-import { dealTray } from '../src/core/generator';
+import { DEFAULT_TUNING, dealTray, type DealerTuning } from '../src/core/generator';
 
 const GAMES = Number(import.meta.env.SIM_GAMES ?? 600);
 
@@ -99,13 +99,17 @@ function bestMove(board: Board, tray: (Piece | null)[]): Move | null {
 }
 
 /** One Classic game with the real dealer, no specials. Returns pieces placed and lines cleared. */
-function playGame(catalog: readonly Piece[], seed: number): { placed: number; lines: number } {
+function playGame(
+  catalog: readonly Piece[],
+  seed: number,
+  tuning: DealerTuning = DEFAULT_TUNING,
+): { placed: number; lines: number } {
   const byId = new Map(catalog.map((p) => [p.id, p]));
   const rng = new Rng(seed);
   const board: Board = new Uint8Array(BOARD_SIZE * BOARD_SIZE);
   let dealsSinceClear = 0;
   let clearedThisDeal = false;
-  let tray = dealTray(board, rng, 0, catalog).map((id) => byId.get(id)!) as (Piece | null)[];
+  let tray = dealTray(board, rng, 0, catalog, tuning).map((id) => byId.get(id)!) as (Piece | null)[];
   let placed = 0;
   let lines = 0;
   for (;;) {
@@ -123,7 +127,7 @@ function playGame(catalog: readonly Piece[], seed: number): { placed: number; li
     if (tray.every((t) => t === null)) {
       dealsSinceClear = clearedThisDeal ? 0 : dealsSinceClear + 1;
       clearedThisDeal = false;
-      tray = dealTray(board, rng, dealsSinceClear, catalog).map((id) => byId.get(id)!);
+      tray = dealTray(board, rng, dealsSinceClear, catalog, tuning).map((id) => byId.get(id)!);
     }
     if (placed > 5000) return { placed, lines }; // the bot found a perpetual loop — cap it
   }
@@ -135,33 +139,71 @@ function summarize(values: number[]): { mean: number; median: number; p10: numbe
   return { mean: values.reduce((a, b) => a + b, 0) / values.length, median: q(0.5), p10: q(0.1) };
 }
 
-describe.skipIf(!import.meta.env.SIM)('piece-mix balance simulation', () => {
-  test('report', async () => {
-    const rows: string[] = [];
-    for (const [name, defs] of Object.entries(CANDIDATES)) {
-      const catalog = buildCatalog(defs);
-      const placed: number[] = [];
-      const lines: number[] = [];
-      const t0 = Date.now();
-      for (let g = 0; g < GAMES; g++) {
-        const r = playGame(catalog, 1000 + g);
-        placed.push(r.placed);
-        lines.push(r.lines);
-      }
-      const p = summarize(placed);
-      const l = summarize(lines);
-      rows.push(
-        `${name.padEnd(38)} pieces/game mean ${p.mean.toFixed(1).padStart(6)}  median ${String(p.median).padStart(4)}  p10 ${String(p.p10).padStart(4)}   lines mean ${l.mean.toFixed(1).padStart(6)}   (${((Date.now() - t0) / 1000).toFixed(0)}s)`,
-      );
-    }
-    const report = `${GAMES} games per catalog, greedy bot, Classic rules without specials\n` + rows.join('\n') + '\n';
-    console.log(report);
-    // the runner may swallow console output — also write the report to SIM_OUT when set
-    const out = import.meta.env.SIM_OUT as string | undefined;
-    if (out) {
-      const fs = (await import(/* @vite-ignore */ 'node:' + 'fs')) as { writeFileSync(p: string, d: string): void };
-      fs.writeFileSync(out, report);
-    }
+function measure(name: string, catalog: readonly Piece[], tuning: DealerTuning): string {
+  const placed: number[] = [];
+  const lines: number[] = [];
+  const t0 = Date.now();
+  for (let g = 0; g < GAMES; g++) {
+    const r = playGame(catalog, 1000 + g, tuning);
+    placed.push(r.placed);
+    lines.push(r.lines);
+  }
+  const p = summarize(placed);
+  const l = summarize(lines);
+  return `${name.padEnd(44)} pieces/game mean ${p.mean.toFixed(1).padStart(6)}  median ${String(p.median).padStart(4)}  p10 ${String(p.p10).padStart(4)}   lines mean ${l.mean.toFixed(1).padStart(6)}   (${((Date.now() - t0) / 1000).toFixed(0)}s)`;
+}
+
+async function emit(title: string, rows: string[]): Promise<void> {
+  const report = `${GAMES} games each, greedy bot, Classic rules without specials — ${title}\n` + rows.join('\n') + '\n';
+  console.log(report);
+  // the runner may swallow console output — also append the report to SIM_OUT when set
+  const out = import.meta.env.SIM_OUT as string | undefined;
+  if (out) {
+    const fs = (await import(/* @vite-ignore */ 'node:' + 'fs')) as { appendFileSync(p: string, d: string): void };
+    fs.appendFileSync(out, report + '\n');
+  }
+}
+
+const t = (patch: Partial<DealerTuning>): DealerTuning => ({ ...DEFAULT_TUNING, ...patch });
+
+/**
+ * Dealer knobs: the shipped tuning plus one-change variants around it.
+ * Measured 2026-10-07, 600 games: no rerolls 50 · previous (5/3/1, pity 2, crowded 50% ×1.6/0.6) 76 ·
+ * shipped (pity 1, crowded 40% ×2.0/0.5) 98 · pity every deal + same 119 (rejected: rigged-feeling).
+ */
+const TUNINGS: Record<string, DealerTuning> = {
+  current: DEFAULT_TUNING,
+  'previous (pity 2, crowded 50% ×1.6/0.6)': t({ pityDeals: 2, crowdedFullness: 0.5, smallBoost: 1.6, bigDamp: 0.6 }),
+  'no rerolls (control)': t({ rerolls: [0, 0, 0] }),
+  'rerolls 5/5/3': t({ rerolls: [5, 5, 3] }),
+  'rerolls 8/5/2': t({ rerolls: [8, 5, 2] }),
+  'rerolls 8/8/5': t({ rerolls: [8, 8, 5] }),
+  'no pity (control)': t({ pityDeals: 99, pityFullness: 2 }),
+  'pity every deal': t({ pityDeals: 0 }),
+  'pity from 50% full': t({ pityFullness: 0.5 }),
+  'no crowded weighting (control)': t({ crowdedFullness: 2 }),
+  'crowded from 40%': t({ crowdedFullness: 0.4 }),
+  'crowded ×2.0 / ×0.5': t({ smallBoost: 2.0, bigDamp: 0.5 }),
+  'crowded ×2.5 / ×0.4': t({ smallBoost: 2.5, bigDamp: 0.4 }),
+  // combinations of the winners above
+  'pity 1 deal + crowded 40%': t({ pityDeals: 1, crowdedFullness: 0.4 }),
+  'pity 1 deal + crowded 40% ×2.0/0.5': t({ pityDeals: 1, crowdedFullness: 0.4, smallBoost: 2.0, bigDamp: 0.5 }),
+  'pity 50% + crowded 40% ×2.0/0.5': t({ pityFullness: 0.5, crowdedFullness: 0.4, smallBoost: 2.0, bigDamp: 0.5 }),
+  'pity every + crowded 40%': t({ pityDeals: 0, crowdedFullness: 0.4 }),
+  'pity every + crowded 40% ×2.0/0.5': t({ pityDeals: 0, crowdedFullness: 0.4, smallBoost: 2.0, bigDamp: 0.5 }),
+};
+
+describe.skipIf(!import.meta.env.SIM)('balance simulation', () => {
+  test.skipIf(import.meta.env.SIM_ONLY && import.meta.env.SIM_ONLY !== 'pieces')('piece catalogs', async () => {
+    const rows = Object.entries(CANDIDATES).map(([name, defs]) => measure(name, buildCatalog(defs), DEFAULT_TUNING));
+    await emit('piece catalogs', rows);
     expect(rows.length).toBe(Object.keys(CANDIDATES).length);
+  }, 1_800_000);
+
+  test.skipIf(import.meta.env.SIM_ONLY && import.meta.env.SIM_ONLY !== 'dealer')('dealer tuning', async () => {
+    const catalog = buildCatalog(SHAPE_DEFS);
+    const rows = Object.entries(TUNINGS).map(([name, tuning]) => measure(name, catalog, tuning));
+    await emit('dealer tuning', rows);
+    expect(rows.length).toBe(Object.keys(TUNINGS).length);
   }, 1_800_000);
 });

@@ -42,11 +42,12 @@ No gravity, no timer (in the base mode). The tension comes entirely from spatial
 
 Pure random feels unfair. Use a **weighted bag with a solvability check**:
 
-1. Generate a candidate set of 3 from weighted probabilities, leaning small: 1×3 and L-tromino 1.3, 1×2 1.2, 1×1 / 2×2 / 1×4 / L / J 1.0, S / Z / T / diagonal pair 0.8, 1×5 0.6, 3×3 0.4. From **50% full**, pieces of ≤3 cells are ×1.6 likelier and pieces of ≥5 cells ×0.6. Weights are tuned with the balance simulator (`SIM=1 npx vitest run tests/sim.test.ts`: a greedy bot plays 1000 games per candidate catalog; adding J was worth +10% game length, favouring 3-cell pieces another +4%, the 3-cell diagonal nothing).
+1. Generate a candidate set of 3 from weighted probabilities, leaning small: 1×3 and L-tromino 1.3, 1×2 1.2, 1×1 / 2×2 / 1×4 / L / J 1.0, S / Z / T / diagonal pair 0.8, 1×5 0.6, 3×3 0.4. From **40% full**, pieces of ≤3 cells are ×2.0 likelier and pieces of ≥5 cells ×0.5. Weights are tuned with the balance simulator (`SIM=1 npx vitest run tests/sim.test.ts`: a greedy bot plays 1000 games per candidate catalog; adding J was worth +10% game length, favouring 3-cell pieces another +4%, the 3-cell diagonal nothing).
 1. Simulate: does at least one ordering of the 3 pieces fit on the current board?
 1. If not, reroll — up to **5 times below 40% full, 3 times up to 60%, once above**. Fewer cheap mid-game deaths, while a truly jammed board still ends the game.
 1. If no ordering fits after the budget → game over is legitimate, deal it anyway (don’t rig wins).
-1. **Pity rule:** after 2 clear-less deals, or whenever the board is **≥60% full**, bias the next deal toward pieces that can complete an almost-full line (a line missing ≤2 cells) — never trading a placeable set for an unplaceable one.
+1. **Pity rule:** after a single clear-less deal, or whenever the board is **≥60% full**, bias the next deal toward pieces that can complete an almost-full line (a line missing ≤2 cells) — never trading a placeable set for an unplaceable one.
+1. All of the above is tuned with the simulator (`SIM=1 SIM_ONLY=dealer npx vitest run tests/sim.test.ts`). Rerolls are the biggest assist (none: 50 pieces/game, 5/3/1: 76, and more rerolls add nothing); the one-deal pity and the 40% crowded weighting add +28% (→ 98). Pity on every deal would add a further +20% but was rejected as rigged-feeling.
 1. **Rush refills** draw one piece at a time with the same weights, rerolled (≤5) until it fits somewhere.
 
 -----

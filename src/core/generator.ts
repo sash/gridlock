@@ -13,23 +13,45 @@ import {
   type Board,
 } from './board';
 
-const PITY_DEALS = 2;
-/** Above this fullness the pity rule applies even if lines were cleared recently. */
-const PITY_FULLNESS = 0.6;
-/** From this fullness on, small pieces are dealt more often and big ones less. */
-const CROWDED_FULLNESS = 0.5;
-const CROWDED_SMALL_BOOST = 1.6; // ≤3 cells
-const CROWDED_BIG_DAMP = 0.6; // ≥5 cells
+/** The dealer's anti-frustration knobs. Tuned with tests/sim.test.ts. */
+export interface DealerTuning {
+  /** Rerolls spent hunting for a fully placeable set, by board fullness band: <40%, <60%, above. */
+  rerolls: readonly [number, number, number];
+  /** Clear-less deals before the pity rule kicks in. */
+  pityDeals: number;
+  /** Above this fullness the pity rule applies even if lines were cleared recently. */
+  pityFullness: number;
+  /** From this fullness on, small pieces are dealt more often and big ones less. */
+  crowdedFullness: number;
+  smallBoost: number; // ≤3 cells
+  bigDamp: number; // ≥5 cells
+}
+
+/**
+ * Measured with the simulator (600 games each, greedy bot): rerolls are the
+ * single biggest assist (none: 50 pieces/game → 5/3/1: 76) and saturate there;
+ * pity after one deal and the stronger crowded weighting from 40% add +28%
+ * on top (76 → 98). Pity on every deal would add another +20% but makes the
+ * dealer feel rigged, so it stays at one clear-less deal.
+ */
+export const DEFAULT_TUNING: DealerTuning = {
+  rerolls: [5, 3, 1],
+  pityDeals: 1,
+  pityFullness: 0.6,
+  crowdedFullness: 0.4,
+  smallBoost: 2.0,
+  bigDamp: 0.5,
+};
 
 /**
  * Rerolls spent hunting for a fully placeable set. Generous on an open board,
- * a single retry on a crowded one — fewer cheap mid-game deaths while a truly
- * jammed board still ends the game.
+ * fewer on a crowded one — fewer cheap mid-game deaths while a truly jammed
+ * board still ends the game.
  */
-function rerollBudget(fullness: number): number {
-  if (fullness < 0.4) return 5;
-  if (fullness < 0.6) return 3;
-  return 1;
+function rerollBudget(fullness: number, t: DealerTuning): number {
+  if (fullness < 0.4) return t.rerolls[0];
+  if (fullness < 0.6) return t.rerolls[1];
+  return t.rerolls[2];
 }
 
 function fullness(board: Board): number {
@@ -37,11 +59,11 @@ function fullness(board: Board): number {
 }
 
 /** Deal weights, shifted toward small pieces when the board is crowded. */
-function dealWeights(fill: number, catalog: readonly Piece[]): number[] {
+function dealWeights(fill: number, catalog: readonly Piece[], t: DealerTuning): number[] {
   return catalog.map((p) => {
-    if (fill < CROWDED_FULLNESS) return p.weight;
-    if (p.cells.length <= 3) return p.weight * CROWDED_SMALL_BOOST;
-    if (p.cells.length >= 5) return p.weight * CROWDED_BIG_DAMP;
+    if (fill < t.crowdedFullness) return p.weight;
+    if (p.cells.length <= 3) return p.weight * t.smallBoost;
+    if (p.cells.length >= 5) return p.weight * t.bigDamp;
     return p.weight;
   });
 }
@@ -121,8 +143,8 @@ function rollSet(rng: Rng, weights: number[], catalog: readonly Piece[]): string
 /**
  * Deal 3 pieces per spec §2: weighted bag (small-leaning when crowded),
  * rerolled toward a fully placeable set with a budget that shrinks as the
- * board fills — legitimately unplaceable deals still go through. After 2
- * clear-less deals, or whenever the board is ≥60% full, bias toward a piece
+ * board fills — legitimately unplaceable deals still go through. After a
+ * clear-less deal, or whenever the board is ≥60% full, bias toward a piece
  * that can complete an almost-full line.
  */
 export function dealTray(
@@ -130,17 +152,18 @@ export function dealTray(
   rng: Rng,
   dealsSinceClear: number,
   catalog: readonly Piece[] = PIECES,
+  tuning: DealerTuning = DEFAULT_TUNING,
 ): string[] {
   const fill = fullness(board);
-  const weights = dealWeights(fill, catalog);
+  const weights = dealWeights(fill, catalog, tuning);
   let set = rollSet(rng, weights, catalog);
   let placeable = isSetPlaceable(board, set, catalog);
-  for (let i = 0; i < rerollBudget(fill) && !placeable; i++) {
+  for (let i = 0; i < rerollBudget(fill, tuning) && !placeable; i++) {
     set = rollSet(rng, weights, catalog);
     placeable = isSetPlaceable(board, set, catalog);
   }
 
-  const pity = dealsSinceClear >= PITY_DEALS || fill >= PITY_FULLNESS;
+  const pity = dealsSinceClear >= tuning.pityDeals || fill >= tuning.pityFullness;
   if (pity && !set.some((id) => canCompleteAlmostFullLine(board, lookup(catalog, id)))) {
     const completers = catalog.filter((p) => canCompleteAlmostFullLine(board, p));
     if (completers.length > 0) {
@@ -160,7 +183,7 @@ export function dealTray(
  * the current board so the instant refill never hands over a dead piece.
  */
 export function dealSingle(board: Board, rng: Rng, catalog: readonly Piece[] = PIECES): string {
-  const weights = dealWeights(fullness(board), catalog);
+  const weights = dealWeights(fullness(board), catalog, DEFAULT_TUNING);
   let piece = rng.weightedPick(catalog, weights);
   for (let i = 0; i < 5 && !anyFit(board, piece); i++) piece = rng.weightedPick(catalog, weights);
   return piece.id;

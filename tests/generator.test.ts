@@ -76,11 +76,11 @@ describe('dealTray', () => {
     expect(sq3).toBeLessThan(bar3 * 0.7);
   });
 
-  test('pity rule: after 2 clear-less deals, set contains a piece completing an almost-full line', () => {
+  test('pity rule: after 1 clear-less deal, set contains a piece completing an almost-full line', () => {
     // row 5 missing exactly 2 cells at (6,5) and (7,5) → BAR2_0 completes it
     const b = board((c, r) => r === 5 && c < 6);
     for (let seed = 0; seed < 100; seed++) {
-      const tray = dealTray(b, new Rng(seed), 2);
+      const tray = dealTray(b, new Rng(seed), 1);
       const hasCompleter = tray.some((id) => canCompleteAlmostFullLine(b, getPiece(id)));
       expect(hasCompleter, `seed ${seed}`).toBe(true);
     }
