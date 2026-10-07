@@ -305,7 +305,8 @@ test('dragging a tray piece onto HOLD parks it, and it can be placed from there'
 
   await page.mouse.move(centerOf(0).x, centerOf(0).y);
   await page.mouse.down();
-  await page.mouse.move(centerOf(3).x, centerOf(3).y, { steps: 8 });
+  // the lifted piece floats 80px above the finger — it's the piece that must land on HOLD
+  await page.mouse.move(centerOf(3).x, centerOf(3).y + 80, { steps: 8 });
   await page.mouse.up();
   await page.waitForFunction(() => window.__game!.game!.state.hold !== null);
   const parked = await page.evaluate(() => ({
@@ -319,6 +320,32 @@ test('dragging a tray piece onto HOLD parks it, and it can be placed from there'
   const placed = await page.evaluate(() => window.__game!.placeAt(3, 0, 0) !== null);
   expect(placed).toBe(true);
   expect(await page.evaluate(() => window.__game!.game!.state.hold)).toBeNull();
+});
+
+test('dropping on the bottom-right of the board places the piece even with the finger over HOLD', async ({ page }) => {
+  await startClassic(page);
+  const geo = await page.evaluate(() => {
+    const app = window.__game as unknown as {
+      boardOrigin: { x: number; y: number };
+      board: { cellSize: number };
+    };
+    window.__game!.game!.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    (app as unknown as { refresh(): void }).refresh();
+    return { ...app.boardOrigin, cs: app.board.cellSize };
+  });
+  // drag slot 0 so the dot sits on cell (7,7); the finger is then 80px lower, over the tray/hold area
+  const trayGeo = await page.evaluate(() => {
+    const app = window.__game as unknown as { trayOrigin: { x: number; y: number }; tray: { slotWidth: number; height: number } };
+    return { ...app.trayOrigin, slotW: app.tray.slotWidth, h: app.tray.height };
+  });
+  await page.mouse.move(trayGeo.x + trayGeo.slotW / 2, trayGeo.y + trayGeo.h / 2);
+  await page.mouse.down();
+  await page.mouse.move(geo.x + 7.5 * geo.cs, geo.y + 7.5 * geo.cs + 80, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForFunction(() => window.__game!.game!.state.score > 0);
+  const s = await page.evaluate(() => ({ hold: window.__game!.game!.state.hold, cell: window.__game!.game!.state.board[63] }));
+  expect(s.hold).toBeNull();
+  expect(s.cell).not.toBe(0);
 });
 
 test('iOS standalone: canvas, HUD and dock span the measured screen, not the short viewport', async ({ browser }) => {

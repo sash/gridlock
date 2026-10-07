@@ -424,20 +424,21 @@ export class GameApp {
     const row = Math.round((py - this.boardOrigin.y) / cs);
     d.col = col;
     d.row = row;
-    // the finger over the hold box wins over a board spot the lifted piece hovers
-    const overHold =
-      d.slot !== HOLD_SLOT &&
-      this.tray.slotAt(e.clientX - this.trayOrigin.x, e.clientY - this.trayOrigin.y) === HOLD_SLOT;
+    // A valid board spot always wins. Only when the lifted piece itself (not
+    // the finger, which rides 80px below it) is centred over the hold box
+    // does the drop park it — so aiming at the bottom rows never gets hijacked.
+    d.valid = g.canPlaceAt(d.slot, col, row);
+    const centerX = px + (piece.w * cs) / 2 - this.trayOrigin.x;
+    const centerY = py + (piece.h * cs) / 2 - this.trayOrigin.y;
+    const overHold = !d.valid && d.slot !== HOLD_SLOT && this.tray.slotAt(centerX, centerY) === HOLD_SLOT;
     if (overHold !== d.overHold) {
       d.overHold = overHold;
       this.renderTray();
     }
     if (overHold) {
-      d.valid = false;
       this.board.clearGhost();
       return;
     }
-    d.valid = g.canPlaceAt(d.slot, col, row);
     this.board.renderGhost(
       d.pieceId,
       col,
