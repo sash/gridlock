@@ -61,7 +61,15 @@ function randomCellWhere(
   return rng.weightedPick(candidates, weights);
 }
 
-/** Spawn gem / ice / bomb at the start of a deal, per spec §5 spawn rules. */
+/** A plain placed block — the only kind a special may take over. */
+const plainBlock = (v: number) => v >= 1 && v <= 8;
+
+/**
+ * Spawn gem / ice / bomb at the start of a deal, per spec §5 spawn rules.
+ * Specials take over blocks the player has already placed rather than empty
+ * cells, so they never eat free space; `touched` is unused here and kept for
+ * the wild zones, which do spawn on (non-blocking) empty cells.
+ */
 export function spawnOnDeal(
   board: Board,
   aux: SpecialsState,
@@ -70,8 +78,9 @@ export function spawnOnDeal(
   score: number,
   touched?: Uint8Array | null,
 ): void {
+  void touched;
   if (dealNumber > 0 && dealNumber % GEM_EVERY_DEALS === 0) {
-    const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY, touched);
+    const i = randomCellWhere(board, rng, plainBlock);
     if (i >= 0) board[i] = CELL.GEM;
   }
   if (score >= ICE_MIN_SCORE && dealNumber > 0 && dealNumber % ICE_EVERY_DEALS === 0) {
@@ -88,15 +97,14 @@ export function spawnOnDeal(
       board,
       rng,
       (v, cell) =>
-        v >= 1 &&
-        v <= 8 &&
+        plainBlock(v) &&
         (rowFill[Math.floor(cell / BOARD_SIZE)] >= ICE_MIN_LINE_FILL ||
           colFill[cell % BOARD_SIZE] >= ICE_MIN_LINE_FILL),
     );
     if (i >= 0) board[i] = CELL.ICE;
   }
   if (dealNumber > 0 && dealNumber % BOMB_EVERY_DEALS === 0) {
-    const i = randomCellWhere(board, rng, (v) => v === CELL.EMPTY, touched);
+    const i = randomCellWhere(board, rng, plainBlock);
     if (i >= 0) {
       board[i] = CELL.BOMB;
       aux.bombs[i] = BOMB_FUSE;

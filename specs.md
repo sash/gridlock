@@ -86,13 +86,13 @@ Pure random feels unfair. Use a **weighted bag with a solvability check**:
 
 ## 5. Making It More Interesting — Special Cells
 
-These spawn on the board (not in pieces) and reward/punish *where* you clear, not just *that* you clear.
+These spawn on the board (not in pieces) and reward/punish *where* you clear, not just *that* you clear. Gems, ice and bombs **take over a block the player has already placed** — they never occupy an empty cell, so they add objectives without eating the free space that keeps the game controllable. (Wild zones sit on empty cells but never block placement.)
 
 |Cell      |Spawn rule                                                     |Effect when its line clears                                                                                                                                  |
 |----------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|💎 **Gem** |1 spawns on a random empty cell every 3 deals                  |+150 bonus points                                                                                                                                            |
+|💎 **Gem** |1 takes over a random placed block every 3 deals               |+150 bonus points                                                                                                                                            |
 |🧊 **Ice** |From score 4,000+: a random *filled* cell in a row or column that is at least half full freezes every 5 deals|Must be cleared **twice** (first clear cracks it, line counts as cleared but the ice cell stays filled)                                                      |
-|💣 **Bomb**|Rare (1 per ~10 deals), sits with a counter: 12 placements; throbs red in its last 3|If cleared in time → explodes a **5×5** area empty — stone included, gems caught pay out, other bombs in reach chain-react (shockwave, debris, board shake, thump). If the counter hits 0 → it petrifies into a **stone** cell for 8 placements; any clear through or orthogonally beside a stone shatters it early|
+|💣 **Bomb**|Rare (1 per ~10 deals), takes over a placed block, sits with a counter: 12 placements; throbs red in its last 3|If cleared in time → explodes a **5×5** area empty — stone included, gems caught pay out, other bombs in reach chain-react (shockwave, debris, board shake, thump). If the counter hits 0 → it petrifies into a **stone** cell for 8 placements; any clear through or orthogonally beside a stone shatters it early|
 |🌈 **Wild**|Reward for a 2+ line clear                                     |Counts as filled for *every* row/column check — the cell helps complete both its row and column                                                              |
 
 Ice and bombs convert the late game from “keep the board tidy” into targeted spatial objectives: *I need a horizontal clear through column 5 within 3 moves.*

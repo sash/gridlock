@@ -20,14 +20,22 @@ function board(fill: (c: number, r: number) => boolean = () => false): Board {
 }
 
 describe('spawnOnDeal', () => {
-  test('gem spawns on an empty cell every 3rd deal', () => {
+  test('gem takes over a placed block every 3rd deal — never an empty cell', () => {
     const b = board((c) => c < 4);
     const aux = createSpecialsState();
+    const emptyBefore = [...b].filter((v) => v === CELL.EMPTY).length;
     spawnOnDeal(b, aux, new Rng(1), 3, 0);
     const gems = [...b].filter((v) => v === CELL.GEM);
     expect(gems.length).toBe(1);
+    expect([...b].filter((v) => v === CELL.EMPTY).length).toBe(emptyBefore);
     spawnOnDeal(b, aux, new Rng(2), 4, 0);
     expect([...b].filter((v) => v === CELL.GEM).length).toBe(1); // not a 3rd deal
+  });
+
+  test('no placed blocks → no gem (specials never eat free space)', () => {
+    const b = board();
+    spawnOnDeal(b, createSpecialsState(), new Rng(1), 3, 0);
+    expect([...b].every((v) => v === CELL.EMPTY)).toBe(true);
   });
 
   test('ice spawns on a filled cell every 5th deal only from score 4000', () => {
@@ -53,12 +61,14 @@ describe('spawnOnDeal', () => {
     }
   });
 
-  test('bomb spawns every 10th deal on an empty cell with a fuse of 12', () => {
-    const b = board();
+  test('bomb takes over a placed block every 10th deal with a fuse of 12', () => {
+    const b = board((c, r) => c < 3 && r < 3);
     const aux = createSpecialsState();
     spawnOnDeal(b, aux, new Rng(1), 10, 0);
     const bombIdx = [...b].findIndex((v) => v === CELL.BOMB);
     expect(bombIdx).toBeGreaterThanOrEqual(0);
+    expect(bombIdx % 8).toBeLessThan(3); // one of the placed blocks
+    expect(Math.floor(bombIdx / 8)).toBeLessThan(3);
     expect(aux.bombs[bombIdx]).toBe(BOMB_FUSE);
     expect(BOMB_FUSE).toBe(12);
   });
@@ -182,7 +192,7 @@ describe('explodeBomb', () => {
 });
 
 describe('virgin-cell weighting', () => {
-  test('gems prefer cells never built on (3× weight)', () => {
+  test('wild zones prefer cells never built on (3× weight)', () => {
     // row 0 empty and never touched; row 1 empty but previously used
     const touched = new Uint8Array(64);
     for (let c = 0; c < 8; c++) touched[idx(c, 1)] = 1;
@@ -191,8 +201,8 @@ describe('virgin-cell weighting', () => {
     for (let seed = 0; seed < 400; seed++) {
       const b = board((_, r) => r >= 2); // rows 0,1 empty
       const aux = createSpecialsState();
-      spawnOnDeal(b, aux, new Rng(seed), 3, 0, touched);
-      const gem = [...b].findIndex((v) => v === CELL.GEM);
+      grantWild(b, new Rng(seed), touched, aux);
+      const gem = aux.wilds[0] ?? -1;
       if (gem >= 0 && gem < 8) virgin++;
       else if (gem >= 8 && gem < 16) used++;
     }
