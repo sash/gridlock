@@ -1,7 +1,7 @@
 import { Application, Container, Graphics } from 'pixi.js';
-import { wildAura } from '../core/specials';
+import { STONE_LIFETIME, wildAura } from '../core/specials';
 import { drawBlock } from './views';
-import { Game, type Mode, type PlaceResult, type PowerUpKind } from '../core/game';
+import { Game, HOLD_SLOT, type Mode, type PlaceResult, type PowerUpKind, type StuckOutcome } from '../core/game';
 import { BOARD_SIZE, CELL } from '../core/board';
 import { getPiece } from '../core/pieces';
 import { streakMultiplier } from '../core/scoring';
@@ -15,6 +15,8 @@ import * as storage from './storage';
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
 const LINES_PER_LEVEL = 3; // levels come fast; blocks reach the top material by ~12 lines
+const BLAST_SHAKE_S = 0.4;
+const RESCUE_SHAKE_S = 0.5;
 
 /** Haptic cues forwarded to the React Native shell (no-op on the web). */
 function nativeHaptic(kind: 'place' | 'clear' | 'big-clear' | 'perfect' | 'game-over'): void {
@@ -28,17 +30,18 @@ const SPECIAL_INTROS: Array<[number, string]> = [
   [CELL.GEM, '💎 A gem! Clear its line for +150'],
   [CELL.ICE, '🧊 Ice! It takes two clears to remove'],
   [CELL.BOMB, '💣 A bomb! Clear its line before the counter hits 0'],
-  [CELL.STONE, '🪨 Petrified! Stone can’t be cleared for 15 placements'],
+  [CELL.STONE, `🪨 Petrified! Clear a line through or beside it to shatter it — or it crumbles in ${STONE_LIFETIME} placements`],
 ];
 const WILD_INTRO = '🌈 Wild zone earned! Its cross counts as filled for clears but never blocks you';
+const HOLD_INTRO = '📥 Tip: drag a piece onto HOLD to save it for later';
 
 /** Shown when the player taps a special brick on the board. */
 const SPECIAL_TAP_INFO: Record<number, string> = {
   [CELL.GEM]: '💎 Gem — clear its row or column for +150 points',
   [CELL.ICE]: '🧊 Ice — needs two clears: first cracks it, second removes it',
   [CELL.CRACKED]: '🧊 Cracked ice — one more clear removes it',
-  [CELL.BOMB]: '💣 Bomb — clear its line before the counter reaches 0 to blast a 3×3 area; too late and it turns to stone',
-  [CELL.STONE]: '🪨 Stone — can’t be cleared; it crumbles on its own after 15 placements',
+  [CELL.BOMB]: '💣 Bomb — clear its line before the counter reaches 0 to blast a 5×5 area; too late and it turns to stone',
+  [CELL.STONE]: `🪨 Stone — clear a line through or right beside it to shatter it; otherwise it crumbles after ${STONE_LIFETIME} placements`,
   [CELL.WILD]: '🌈 Wild zone — never blocks your pieces, but its cross counts as filled when completing lines. One clear through it uses it up',
 };
 
@@ -49,6 +52,8 @@ interface DragState {
   col: number;
   row: number;
   valid: boolean;
+  /** Finger is over the hold slot — dropping parks the piece there. */
+  overHold: boolean;
 }
 
 export class GameApp {
@@ -65,6 +70,9 @@ export class GameApp {
   private inventory = storage.getInventory();
   private nearDeathZones = new Set<number>();
   private pulsePhase = 0;
+  private shakeLeft = 0;
+  private shakeTotal = 0;
+  private shakeAmp = 0;
   private boardOrigin = { x: 0, y: 0 };
   private trayOrigin = { x: 0, y: 0 };
 
@@ -236,8 +244,9 @@ export class GameApp {
       // full height with the power-up dock and tray flanking it
       const dockW = 58;
       const hudReserve = 150; // left column with ☰/?, score, flame
-      const size = Math.min(h - 24, (w - hudReserve - dockW - 24 - 28 - 20) * 0.75, 520);
-      const trayW = size / 3;
+      // tray column holds 4 slots (3 dealt + hold) along the board's height
+      const size = Math.min(h - 24, (w - hudReserve - dockW - 24 - 28 - 20) * 0.8, 520);
+      const trayW = size / 4;
       const groupW = dockW + 24 + size + 28 + trayW;
       const x0 = hudReserve + (w - hudReserve - groupW) / 2;
       const boardY = (h - size) / 2;
@@ -254,7 +263,7 @@ export class GameApp {
     }
     this.hud.positionDock('bottom');
 
-    const trayH = Math.min(w, 520) / 3 * 0.9;
+    const trayH = Math.min(w, 520) / 4 * 0.9;
     const size = Math.min(w - 28, h - topBar - trayH - 110, 520);
     this.boardOrigin = { x: (w - size) / 2, y: topBar };
     this.board.container.position.set(this.boardOrigin.x, this.boardOrigin.y);
@@ -271,7 +280,7 @@ export class GameApp {
     const g = this.game;
     if (!g) return;
     this.board.render(g.state.board, g.state.aux, this.levelTier());
-    this.tray.render(g.state.tray, this.drag?.slot ?? null, this.levelTier());
+    this.renderTray();
     this.hud.setLevel(
       Math.floor(g.state.totalLines / LINES_PER_LEVEL),
       (g.state.totalLines % LINES_PER_LEVEL) / LINES_PER_LEVEL,
@@ -284,14 +293,20 @@ export class GameApp {
     this.updateNearDeath();
   }
 
+  private renderTray(): void {
+    const g = this.game;
+    if (!g) return;
+    this.tray.render([...g.state.tray, g.state.hold], this.drag?.slot ?? null, this.levelTier(), this.drag?.overHold ?? false);
+  }
+
   private updateNearDeath(): void {
     const g = this.game;
     this.nearDeathZones.clear();
     if (!g || g.state.over) return;
     const moves = g.totalValidMoves();
     if (moves > 0 && moves <= NEAR_DEATH_MOVES) {
-      for (let slot = 0; slot < 3; slot++) {
-        const id = g.state.tray[slot];
+      for (const slot of [0, 1, 2, HOLD_SLOT]) {
+        const id = g.pieceAt(slot);
         if (!id) continue;
         const piece = getPiece(id);
         for (let r = 0; r <= BOARD_SIZE - piece.h; r++) {
@@ -310,11 +325,30 @@ export class GameApp {
     this.particles.update(dt);
     this.pulsePhase += dt;
     this.board.renderNearDeath(this.nearDeathZones.size > 0, this.nearDeathZones, this.pulsePhase);
+    this.board.renderBombWarnings(this.game && !this.game.state.over ? this.game.state.aux : null, this.pulsePhase);
+    this.updateShake(dt);
     const g = this.game;
     if (g && g.state.mode === 'rush' && !g.state.over && !document.hidden) {
       if (g.tickTime(dt)) this.finishGame();
       else this.hud.setRushTime(g.state.rushTimeLeft);
     }
+  }
+
+  private shake(seconds: number, amplitude: number): void {
+    this.shakeAmp = this.shakeLeft > 0 ? Math.max(this.shakeAmp, amplitude) : amplitude;
+    this.shakeLeft = Math.max(this.shakeLeft, seconds);
+    this.shakeTotal = this.shakeLeft;
+  }
+
+  /** Jolts the board (and tray with it) — decays over the shake window. */
+  private updateShake(dt: number): void {
+    if (this.shakeLeft <= 0) return;
+    this.shakeLeft = Math.max(0, this.shakeLeft - dt);
+    const amp = this.shakeAmp * (this.shakeLeft / this.shakeTotal);
+    const dx = (Math.random() * 2 - 1) * amp;
+    const dy = (Math.random() * 2 - 1) * amp;
+    this.board.container.position.set(this.boardOrigin.x + dx, this.boardOrigin.y + dy);
+    this.tray.container.position.set(this.trayOrigin.x + dx * 0.5, this.trayOrigin.y + dy * 0.5);
   }
 
   // --- input ---
@@ -332,7 +366,7 @@ export class GameApp {
     const tx = e.clientX - this.trayOrigin.x;
     const ty = e.clientY - this.trayOrigin.y;
     const slot = this.tray.slotAt(tx, ty);
-    if (slot === null || !g.state.tray[slot]) {
+    if (slot === null || !g.pieceAt(slot)) {
       // tapping a special brick on the board explains what it does
       const cell = this.cellFromEvent(e);
       if (cell) {
@@ -356,7 +390,7 @@ export class GameApp {
       return;
     }
 
-    const pieceId = g.state.tray[slot]!;
+    const pieceId = g.pieceAt(slot)!;
     const gfx = new Container();
     const shape = new Graphics();
     gfx.addChild(shape);
@@ -366,8 +400,8 @@ export class GameApp {
       drawBlock(shape, c * cs, r * cs, cs, this.theme.colors[piece.color - 1], this.levelTier());
     }
     this.stage.addChild(gfx);
-    this.drag = { slot, pieceId, gfx, col: -1, row: -1, valid: false };
-    this.tray.render(g.state.tray, slot, this.levelTier());
+    this.drag = { slot, pieceId, gfx, col: -1, row: -1, valid: false, overHold: false };
+    this.renderTray();
     this.moveDrag(e);
   }
 
@@ -387,6 +421,19 @@ export class GameApp {
     const row = Math.round((py - this.boardOrigin.y) / cs);
     d.col = col;
     d.row = row;
+    // the finger over the hold box wins over a board spot the lifted piece hovers
+    const overHold =
+      d.slot !== HOLD_SLOT &&
+      this.tray.slotAt(e.clientX - this.trayOrigin.x, e.clientY - this.trayOrigin.y) === HOLD_SLOT;
+    if (overHold !== d.overHold) {
+      d.overHold = overHold;
+      this.renderTray();
+    }
+    if (overHold) {
+      d.valid = false;
+      this.board.clearGhost();
+      return;
+    }
     d.valid = g.canPlaceAt(d.slot, col, row);
     this.board.renderGhost(
       d.pieceId,
@@ -401,9 +448,10 @@ export class GameApp {
     const d = this.drag;
     if (!d) return;
     this.moveDrag(e);
-    const { slot, col, row, valid } = d;
+    const { slot, col, row, valid, overHold } = d;
     this.cancelDrag();
-    if (valid) this.placeAt(slot, col, row);
+    if (overHold) this.holdAt(slot);
+    else if (valid) this.placeAt(slot, col, row);
     else if (this.game && !this.game.state.over) this.refresh();
   }
 
@@ -412,7 +460,7 @@ export class GameApp {
       this.drag.gfx.destroy({ children: true });
       this.drag = null;
       this.board.clearGhost();
-      if (this.game) this.tray.render(this.game.state.tray, null, this.game.state.totalLines);
+      this.renderTray();
     }
   }
 
@@ -422,6 +470,20 @@ export class GameApp {
     const row = Math.floor((e.clientY - this.boardOrigin.y) / cs);
     if (col < 0 || col >= BOARD_SIZE || row < 0 || row >= BOARD_SIZE) return null;
     return { col, row };
+  }
+
+  /** Park a tray piece in the hold slot (swapping with what's there). */
+  holdAt(slot: number): boolean {
+    const g = this.game;
+    const outcome = g?.holdPiece(slot);
+    if (!g || !outcome) return false;
+    nativeHaptic('place');
+    this.audio.place();
+    this.rescueFx(outcome);
+    this.persist();
+    this.refresh();
+    if (outcome.gameOver) this.finishGame();
+    return true;
   }
 
   /** Full placement pipeline — also the programmatic entry point used by e2e. */
@@ -449,11 +511,13 @@ export class GameApp {
         }, 750);
       }
       this.particles.burst(
-        [...result.clearedCells, ...result.explodedCells],
+        [...result.clearedCells, ...result.shatteredCells],
         result.lines,
         this.board.cellSize,
         0xffffff,
       );
+      if (result.blastCenters.length > 0) this.blastFx(result);
+      if (result.shatteredCells.length > 0) this.hud.toast('🪨 Stone shattered!', 1200);
     } else {
       nativeHaptic('place');
       this.audio.place();
@@ -468,6 +532,7 @@ export class GameApp {
       this.audio.say('Perfect clear!');
       this.hud.toast('✨ Perfect Clear! +300');
     }
+    this.rescueFx(result);
     for (const kind of result.earned) {
       this.inventory[kind] += 1;
       this.hud.toast(`Power-up earned: ${kind}`);
@@ -480,6 +545,34 @@ export class GameApp {
     this.introduceSpecials();
     if (result.gameOver) this.finishGame();
     return result;
+  }
+
+  /** Last chance fired: the cracked-away rows burst and the board jolts. */
+  private rescueFx(outcome: StuckOutcome): void {
+    if (!outcome.lastChance) return;
+    nativeHaptic('big-clear');
+    this.audio.boom();
+    this.shake(RESCUE_SHAKE_S, this.board.cellSize * 0.3);
+    this.particles.burst(
+      outcome.dissolvedRows.flatMap((r) => Array.from({ length: BOARD_SIZE }, (_, c) => r * BOARD_SIZE + c)),
+      { rows: outcome.dissolvedRows, cols: [] },
+      this.board.cellSize,
+      0xffd166,
+    );
+    this.hud.cheer('LAST CHANCE!', '🛟 stuck — a row cracked away. Next time it’s game over', '#ffd166');
+    this.audio.say('Last chance!');
+  }
+
+  /** Bomb went off: flash ring + debris per bomb, board shake, thump. */
+  private blastFx(result: PlaceResult): void {
+    const cs = this.board.cellSize;
+    for (const center of result.blastCenters) this.particles.blast(center, cs);
+    this.particles.burst(result.explodedCells, { rows: [], cols: [] }, cs, 0xffd166);
+    this.shake(BLAST_SHAKE_S, cs * (0.22 + 0.08 * Math.min(result.blastCenters.length - 1, 3)));
+    this.audio.boom();
+    nativeHaptic('big-clear');
+    const chain = result.blastCenters.length;
+    this.hud.toast(chain > 1 ? `💥 CHAIN REACTION ×${chain}!` : `💥 BOOM! ${result.explodedCells.length} blocks blasted`, 1600);
   }
 
   private levelTier(): number {
@@ -522,11 +615,14 @@ export class GameApp {
     } catch {
       seen = [];
     }
+    // the hold tip piggybacks on the special-intro ledger with a sentinel key
+    const HOLD_TIP = -1;
     const intros: Array<[number, string]> = [...SPECIAL_INTROS];
     if (g.state.aux.wilds.length > 0) intros.push([CELL.WILD, WILD_INTRO]);
+    if (g.state.dealNumber >= 2) intros.push([HOLD_TIP, HOLD_INTRO]);
     for (const [cell, message] of intros) {
       if (seen.includes(cell)) continue;
-      if (cell !== CELL.WILD && !g.state.board.includes(cell)) continue;
+      if (cell !== CELL.WILD && cell !== HOLD_TIP && !g.state.board.includes(cell)) continue;
       this.hud.toast(message, 3200);
       seen.push(cell);
       try {
@@ -586,7 +682,7 @@ export class GameApp {
 
   private handlePowerUp(kind: PowerUpKind): void {
     const g = this.game;
-    if (!g || g.state.over || g.state.used[kind] || this.inventory[kind] <= 0) return;
+    if (!g || g.state.over || g.usesLeft(kind) <= 0 || this.inventory[kind] <= 0) return;
     switch (kind) {
       case 'swap':
         if (g.useSwap()) this.consumePowerUp('swap');

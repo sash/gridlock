@@ -2,6 +2,7 @@ import type { Rng } from './rng';
 import { PIECES, getPiece, type Piece } from './pieces';
 import {
   BOARD_SIZE,
+  anyFit,
   applyClears,
   canPlace,
   filledCount,
@@ -12,9 +13,38 @@ import {
   type Board,
 } from './board';
 
-const FULLNESS_GUARANTEE_THRESHOLD = 0.4;
-const MAX_REROLLS = 5;
-const PITY_DEALS = 4;
+const PITY_DEALS = 2;
+/** Above this fullness the pity rule applies even if lines were cleared recently. */
+const PITY_FULLNESS = 0.6;
+/** From this fullness on, small pieces are dealt more often and big ones less. */
+const CROWDED_FULLNESS = 0.5;
+const CROWDED_SMALL_BOOST = 1.6; // ≤3 cells
+const CROWDED_BIG_DAMP = 0.6; // ≥5 cells
+
+/**
+ * Rerolls spent hunting for a fully placeable set. Generous on an open board,
+ * a single retry on a crowded one — fewer cheap mid-game deaths while a truly
+ * jammed board still ends the game.
+ */
+function rerollBudget(fullness: number): number {
+  if (fullness < 0.4) return 5;
+  if (fullness < 0.6) return 3;
+  return 1;
+}
+
+function fullness(board: Board): number {
+  return filledCount(board) / board.length;
+}
+
+/** Deal weights, shifted toward small pieces when the board is crowded. */
+function dealWeights(fill: number): number[] {
+  return PIECES.map((p) => {
+    if (fill < CROWDED_FULLNESS) return p.weight;
+    if (p.cells.length <= 3) return p.weight * CROWDED_SMALL_BOOST;
+    if (p.cells.length >= 5) return p.weight * CROWDED_BIG_DAMP;
+    return p.weight;
+  });
+}
 
 /**
  * Can the 3 pieces be placed in some order (clears along the way free space)?
@@ -72,36 +102,49 @@ export function canCompleteAlmostFullLine(board: Board, piece: Piece): boolean {
   return false;
 }
 
-function rollSet(rng: Rng): string[] {
-  const weights = PIECES.map((p) => p.weight);
+function rollSet(rng: Rng, weights: number[]): string[] {
   return Array.from({ length: 3 }, () => rng.weightedPick(PIECES, weights).id);
 }
 
 /**
- * Deal 3 pieces per spec §2: weighted bag; if the board is <40% full the set
- * is guaranteed fully placeable (≤5 rerolls); above that, legitimately
- * unplaceable deals go through. After 4 clear-less deals, bias toward a piece
+ * Deal 3 pieces per spec §2: weighted bag (small-leaning when crowded),
+ * rerolled toward a fully placeable set with a budget that shrinks as the
+ * board fills — legitimately unplaceable deals still go through. After 2
+ * clear-less deals, or whenever the board is ≥60% full, bias toward a piece
  * that can complete an almost-full line.
  */
 export function dealTray(board: Board, rng: Rng, dealsSinceClear: number): string[] {
-  const guarantee = filledCount(board) / board.length < FULLNESS_GUARANTEE_THRESHOLD;
-  let set = rollSet(rng);
-  if (guarantee) {
-    for (let i = 0; i < MAX_REROLLS && !isSetPlaceable(board, set); i++) {
-      set = rollSet(rng);
-    }
+  const fill = fullness(board);
+  const weights = dealWeights(fill);
+  let set = rollSet(rng, weights);
+  let placeable = isSetPlaceable(board, set);
+  for (let i = 0; i < rerollBudget(fill) && !placeable; i++) {
+    set = rollSet(rng, weights);
+    placeable = isSetPlaceable(board, set);
   }
 
-  if (dealsSinceClear >= PITY_DEALS && !set.some((id) => canCompleteAlmostFullLine(board, getPiece(id)))) {
+  const pity = dealsSinceClear >= PITY_DEALS || fill >= PITY_FULLNESS;
+  if (pity && !set.some((id) => canCompleteAlmostFullLine(board, getPiece(id)))) {
     const completers = PIECES.filter((p) => canCompleteAlmostFullLine(board, p));
     if (completers.length > 0) {
       const replacement = completers[rng.int(completers.length)].id;
       const slot = rng.int(3);
       const candidate = [...set];
       candidate[slot] = replacement;
-      // keep the early-game guarantee intact
-      if (!guarantee || isSetPlaceable(board, candidate)) set = candidate;
+      // never trade a placeable set for an unplaceable one
+      if (!placeable || isSetPlaceable(board, candidate)) set = candidate;
     }
   }
   return set;
+}
+
+/**
+ * Rush refill: one piece at a time, rerolled (≤5) until it fits somewhere on
+ * the current board so the instant refill never hands over a dead piece.
+ */
+export function dealSingle(board: Board, rng: Rng): string {
+  const weights = dealWeights(fullness(board));
+  let piece = rng.weightedPick(PIECES, weights);
+  for (let i = 0; i < 5 && !anyFit(board, piece); i++) piece = rng.weightedPick(PIECES, weights);
+  return piece.id;
 }

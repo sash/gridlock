@@ -6,11 +6,13 @@
 
 ## 1. Core Loop
 
-1. Player sees an **8×8 grid** and a **tray of 3 pieces**.
+1. Player sees an **8×8 grid**, a **tray of 3 pieces** and a **hold slot**.
 1. Player drags any of the 3 pieces onto the grid (any order).
 1. A completed **row or column** clears instantly and scores points.
-1. When all 3 pieces are placed, a new set of 3 is dealt.
-1. **Game over** when none of the remaining tray pieces fits anywhere on the board.
+1. When all 3 pieces are placed (or parked in hold), a new set of 3 is dealt.
+1. **Hold:** drag a tray piece onto the hold slot to park it; dropping another piece there swaps them. The held piece can be placed at any time and doesn't count toward the next deal — pieces are postponed, never discarded.
+1. **Last chance:** the first time nothing fits (tray + hold), the fullest rows crack away one at a time until something fits again. Once per game.
+1. **Game over** when none of the remaining tray or held pieces fits anywhere on the board and the last chance is spent.
 
 No gravity, no timer (in the base mode). The tension comes entirely from spatial budgeting: every placement constrains the future.
 
@@ -23,7 +25,7 @@ No gravity, no timer (in the base mode). The tension comes entirely from spatial
 - 8×8 cells. Cell states: `empty`, `filled(color)`, plus special states defined in §5.
 - Coordinates: `(col, row)`, origin top-left.
 
-### Piece set (14 shapes)
+### Piece set (14 logical shapes, 31 dealt variants)
 
 |Category   |Shapes                                            |
 |-----------|--------------------------------------------------|
@@ -31,6 +33,7 @@ No gravity, no timer (in the base mode). The tension comes entirely from spatial
 |Squares    |2×2, 3×3                                          |
 |L-shapes   |L-tromino (4 rotations), L-tetromino (4 rotations)|
 |S/Z & T    |S, Z, T tetrominoes (fixed rotations as dealt)    |
+|Diagonals  |2-cell and 3-cell corner-touching diagonals (2 orientations each) — slot into checkerboard-style holes|
 
 - **Pieces cannot be rotated by the player.** Rotation variants are dealt as distinct pieces. (This is a deliberate design choice — it makes each deal a real puzzle. See §7 for a power-up that bends this rule.)
 - Each piece has a color, purely cosmetic (color does not affect matching).
@@ -39,11 +42,12 @@ No gravity, no timer (in the base mode). The tension comes entirely from spatial
 
 Pure random feels unfair. Use a **weighted bag with a solvability check**:
 
-1. Generate a candidate set of 3 from weighted probabilities (big pieces rarer: 3×3 weight 0.4, 1×1 weight 0.6, mid pieces 1.0).
+1. Generate a candidate set of 3 from weighted probabilities, leaning small: 1×2 1.2, 1×1 1.0, mid pieces 1.0, diagonal pair 0.8, 1×5 0.6, diagonal triple 0.5, 3×3 0.4. From **50% full**, pieces of ≤3 cells are ×1.6 likelier and pieces of ≥5 cells ×0.6.
 1. Simulate: does at least one ordering of the 3 pieces fit on the current board?
-1. If no ordering fits → game over is legitimate, deal it anyway (don’t rig wins).
-1. If the board is **<40% full**, guarantee the set is fully placeable (reject and re-roll up to 5 times). This removes “cheap deaths” early without making the late game fake.
-1. **Pity rule:** if the player hasn’t cleared a line in 4 consecutive deals, bias the next deal toward pieces that can complete an almost-full line (a line missing ≤2 cells).
+1. If not, reroll — up to **5 times below 40% full, 3 times up to 60%, once above**. Fewer cheap mid-game deaths, while a truly jammed board still ends the game.
+1. If no ordering fits after the budget → game over is legitimate, deal it anyway (don’t rig wins).
+1. **Pity rule:** after 2 clear-less deals, or whenever the board is **≥60% full**, bias the next deal toward pieces that can complete an almost-full line (a line missing ≤2 cells) — never trading a placeable set for an unplaceable one.
+1. **Rush refills** draw one piece at a time with the same weights, rerolled (≤5) until it fits somewhere.
 
 -----
 
@@ -86,9 +90,9 @@ These spawn on the board (not in pieces) and reward/punish *where* you clear, no
 |Cell      |Spawn rule                                                     |Effect when its line clears                                                                                                                                  |
 |----------|---------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
 |💎 **Gem** |1 spawns on a random empty cell every 3 deals                  |+150 bonus points                                                                                                                                            |
-|🧊 **Ice** |From score 2,000+: a random *filled* cell freezes every 5 deals|Must be cleared **twice** (first clear cracks it, line counts as cleared but the ice cell stays filled)                                                      |
-|💣 **Bomb**|Rare (1 per ~10 deals), sits with a counter: 9 placements      |If cleared in time → explodes a 3×3 area empty (bonus clear). If the counter hits 0 → it petrifies into a permanent **stone** cell for the next 15 placements|
-|🌈 **Wild**|Reward for a 3+ line clear                                     |Counts as filled for *every* row/column check — the cell helps complete both its row and column                                                              |
+|🧊 **Ice** |From score 4,000+: a random *filled* cell in a row or column that is at least half full freezes every 5 deals|Must be cleared **twice** (first clear cracks it, line counts as cleared but the ice cell stays filled)                                                      |
+|💣 **Bomb**|Rare (1 per ~10 deals), sits with a counter: 12 placements; throbs red in its last 3|If cleared in time → explodes a **5×5** area empty — stone included, gems caught pay out, other bombs in reach chain-react (shockwave, debris, board shake, thump). If the counter hits 0 → it petrifies into a **stone** cell for 8 placements; any clear through or orthogonally beside a stone shatters it early|
+|🌈 **Wild**|Reward for a 2+ line clear                                     |Counts as filled for *every* row/column check — the cell helps complete both its row and column                                                              |
 
 Ice and bombs convert the late game from “keep the board tidy” into targeted spatial objectives: *I need a horizontal clear through column 5 within 3 moves.*
 
@@ -105,14 +109,14 @@ Ice and bombs convert the late game from “keep the board tidy” into targeted
 
 ## 7. Power-ups (consumables, earned not bought — or bought, see §10)
 
-Max 1 use of each per game in Classic (keeps leaderboards honest):
+Max 2 uses of each per game (keeps leaderboards honest):
 
-- **Rotate** — rotate one tray piece 90°.
+- **Rotate** — rotate one tray or held piece 90°.
 - **Swap** — replace the entire tray with a fresh deal.
 - **Hammer** — delete any single filled cell.
 - **Undo** — revert the last placement (disabled after a clear).
 
-Earned via: daily login, watching the streak meter hit ×5, perfect clears.
+Earned via: daily login, every 15 cleared lines, watching the streak meter hit ×5, perfect clears.
 
 -----
 

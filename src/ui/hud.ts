@@ -1,4 +1,4 @@
-import type { Mode, PowerUpKind } from '../core/game';
+import { MAX_POWERUP_USES, POWERUP_EVERY_LINES, type Mode, type PowerUpKind } from '../core/game';
 import { type Theme } from './theme';
 import type { Inventory } from './storage';
 
@@ -236,6 +236,10 @@ export class Hud {
           <p>Drag pieces from the tray onto the board. Fill a whole <b>row or column</b> to clear
           it. Pieces can't be rotated — each deal is a little puzzle. The game ends when no
           remaining piece fits anywhere.</p>
+          <p>📥 <b>Hold</b> — drag a piece onto the HOLD box at the end of the tray to park it
+          for later. Drop another piece there to swap them. A held piece can be placed any time.</p>
+          <p>🛟 <b>Last chance</b> — the first time you get stuck, the fullest row cracks away
+          and you keep playing. The second time it's game over.</p>
           <h3>Scoring</h3>
           <ul>
             <li>▪️ 1 point per cell placed</li>
@@ -244,7 +248,7 @@ export class Hud {
             It survives two placements without a clear — the flame dims as it cools.
             When the screen edges glow warm, your streak is hot (×2.5+).</li>
             <li>✨ Emptying the entire board: +300 Perfect Clear</li>
-            <li>⬆️ Every 10 cleared lines you <b>level up</b> — watch your blocks evolve from flat
+            <li>⬆️ Every 3 cleared lines you <b>level up</b> — watch your blocks evolve from flat
             to glossy to gleaming neon.</li>
           </ul>
           <h3>Special cells <span style="font-weight:400;opacity:.7">(appear as you play)</span></h3>
@@ -252,20 +256,22 @@ export class Hud {
             <li>💎 <b>Gem</b> — clear its line for +150 points.</li>
             <li>🧊 <b>Ice</b> — takes two clears: the first cracks it, the second removes it.</li>
             <li>💣 <b>Bomb</b> — the number counts your placements. Clear its line in time and it
-            blasts a 3×3 area free; let it hit 0 and it petrifies…</li>
-            <li>🪨 <b>Stone</b> — can't be cleared. Crumbles by itself after 15 placements.</li>
-            <li>🌈 <b>Wild zone</b> — earned by a 3-line clear. Its rainbow cross never blocks
+            blasts a 5×5 area free — stone included, and nearby bombs go off too. It glows red in
+            its last 3 placements; let it hit 0 and it petrifies…</li>
+            <li>🪨 <b>Stone</b> — blocks your pieces. Clear a line through or right next to it to
+            shatter it, or wait 8 placements for it to crumble.</li>
+            <li>🌈 <b>Wild zone</b> — earned by clearing 2+ lines at once. Its rainbow cross never blocks
             your pieces but counts as filled when completing lines — clear through it for an easy
             big clear. One clear uses it up.</li>
             <li>⏱ <b>Time target</b> <span style="opacity:.7">(Rush only)</span> — a glowing ring marks a block worth bonus seconds; clear its line in time to bank them.</li>
           </ul>
-          <h3>Power-ups <span style="font-weight:400;opacity:.7">(bottom bar, one use each per game)</span></h3>
+          <h3>Power-ups <span style="font-weight:400;opacity:.7">(bottom bar, ${MAX_POWERUP_USES} uses each per game)</span></h3>
           <ul>
             ${(Object.keys(PU_INFO) as PowerUpKind[])
               .map((k) => `<li>${PU_ICONS[k]} <b>${PU_INFO[k].name}</b> — ${PU_INFO[k].desc}</li>`)
               .join('')}
           </ul>
-          <p style="opacity:.75">Earn more by playing daily, reaching a ×5 streak, or landing a Perfect Clear.</p>
+          <p style="opacity:.75">Earn more by playing daily, every ${POWERUP_EVERY_LINES} lines cleared, reaching a ×5 streak, or landing a Perfect Clear.</p>
         </div>
         <button class="gl-btn primary" id="gl-help-close">Got it</button>
       </div>
@@ -370,14 +376,14 @@ export class Hud {
     if (secondsLeft !== null) bar.style.width = `${(secondsLeft / 90) * 100}%`;
   }
 
-  setPowerUps(inv: Inventory, used: Record<PowerUpKind, boolean>, armed: PowerUpKind | null, visible: boolean): void {
+  setPowerUps(inv: Inventory, used: Record<PowerUpKind, number>, armed: PowerUpKind | null, visible: boolean): void {
     const wrap = this.el('gl-powerups');
     wrap.classList.toggle('hidden', !visible);
     for (const k of Object.keys(PU_ICONS) as PowerUpKind[]) {
       const btn = this.root.querySelector<HTMLButtonElement>(`[data-pu="${k}"]`)!;
       const count = this.root.querySelector<HTMLElement>(`[data-count="${k}"]`)!;
       count.textContent = String(inv[k]);
-      btn.disabled = used[k] || inv[k] <= 0;
+      btn.disabled = used[k] >= MAX_POWERUP_USES || inv[k] <= 0;
       btn.classList.toggle('armed', armed === k);
     }
   }

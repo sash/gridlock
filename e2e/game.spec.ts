@@ -273,16 +273,46 @@ test('tapping a special brick explains it; menu offers New game mid-game', async
   await expect(page.locator('#gl-overlay-menu')).toBeHidden();
 });
 
-test('power-up swap replaces the tray once', async ({ page }) => {
+test('power-up swap replaces the tray, twice per game at most', async ({ page }) => {
   await startClassic(page);
-  const before = await page.evaluate(() => window.__game!.game!.state.tray);
   await page.click('[data-pu="swap"]');
   const after = await page.evaluate(() => ({
     tray: window.__game!.game!.state.tray,
     used: window.__game!.game!.state.used,
   }));
   expect(after.tray.filter(Boolean).length).toBe(3);
-  expect((after.used as Record<string, boolean>).swap).toBe(true);
-  void before;
+  expect(after.used.swap).toBe(1);
+  await page.click('[data-pu="swap"]');
+  expect(await page.evaluate(() => window.__game!.game!.state.used.swap)).toBe(2);
   await expect(page.locator('[data-pu="swap"]')).toBeDisabled();
+});
+
+test('dragging a tray piece onto HOLD parks it, and it can be placed from there', async ({ page }) => {
+  await startClassic(page);
+  const geo = await page.evaluate(() => {
+    const app = window.__game as unknown as {
+      trayOrigin: { x: number; y: number };
+      tray: { slotWidth: number; height: number };
+    };
+    return { ...app.trayOrigin, slotW: app.tray.slotWidth, h: app.tray.height };
+  });
+  const first = await page.evaluate(() => window.__game!.game!.state.tray[0]);
+  const centerOf = (slot: number) => ({ x: geo.x + geo.slotW * (slot + 0.5), y: geo.y + geo.h / 2 });
+
+  await page.mouse.move(centerOf(0).x, centerOf(0).y);
+  await page.mouse.down();
+  await page.mouse.move(centerOf(3).x, centerOf(3).y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForFunction(() => window.__game!.game!.state.hold !== null);
+  const parked = await page.evaluate(() => ({
+    hold: window.__game!.game!.state.hold,
+    slot0: window.__game!.game!.state.tray[0],
+  }));
+  expect(parked.hold).toBe(first);
+  expect(parked.slot0).toBeNull();
+
+  // place the held piece programmatically through the app pipeline
+  const placed = await page.evaluate(() => window.__game!.placeAt(3, 0, 0) !== null);
+  expect(placed).toBe(true);
+  expect(await page.evaluate(() => window.__game!.game!.state.hold)).toBeNull();
 });

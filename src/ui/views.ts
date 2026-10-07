@@ -1,7 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { BOARD_SIZE, CELL, idx, type Board, type Lines } from '../core/board';
 import { getPiece } from '../core/pieces';
-import type { SpecialsState } from '../core/specials';
+import { BOMB_WARN_AT, type SpecialsState } from '../core/specials';
 import { SPECIAL_COLORS, SPECIAL_GLYPHS, type Theme } from './theme';
 
 const GAP = 2;
@@ -57,11 +57,30 @@ export class BoardView {
   private ghost = new Graphics();
   private pulse = new Graphics();
   private dim = new Graphics();
+  private warn = new Graphics();
   private glyphs = new Container();
   cellSize = 0;
 
   constructor(private theme: Theme) {
-    this.container.addChild(this.bg, this.cells, this.glyphs, this.pulse, this.ghost, this.dim);
+    this.container.addChild(this.bg, this.cells, this.glyphs, this.warn, this.pulse, this.ghost, this.dim);
+  }
+
+  /** Bombs about to petrify throb red so the deadline can't sneak up on you. */
+  renderBombWarnings(aux: SpecialsState | null, phase: number): void {
+    const g = this.warn;
+    g.clear();
+    if (!aux) return;
+    const cs = this.cellSize;
+    const throb = 0.5 + 0.5 * Math.sin(phase * 9);
+    for (const [key, fuse] of Object.entries(aux.bombs)) {
+      if (fuse > BOMB_WARN_AT) continue;
+      const i = Number(key);
+      const x = (i % BOARD_SIZE) * cs;
+      const y = Math.floor(i / BOARD_SIZE) * cs;
+      const grow = 2 + throb * 3;
+      g.roundRect(x - grow + GAP, y - grow + GAP, cs - GAP * 2 + grow * 2, cs - GAP * 2 + grow * 2, cs * 0.22)
+        .stroke({ color: 0xff3b3b, width: 3, alpha: 0.45 + 0.5 * throb });
+    }
   }
 
   setTheme(theme: Theme): void {
@@ -214,20 +233,43 @@ export class BoardView {
   }
 }
 
-/** The 3-slot piece tray — horizontal under the board, or a vertical column in landscape. */
+/** Index of the hold slot in the tray view (after the 3 dealt pieces). */
+const HOLD_INDEX = 3;
+const TRAY_SLOTS = 4;
+
+/**
+ * The piece tray — 3 dealt pieces plus a framed hold slot at the end.
+ * Horizontal under the board, or a vertical column in landscape.
+ */
 export class TrayView {
   readonly container = new Container();
   private slots: Container[] = [];
+  private holdFrame = new Graphics();
+  private holdLabel = new Text({ text: 'HOLD', style: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5 } });
   private vertical = false;
   slotWidth = 0;
   height = 0;
 
   constructor(private theme: Theme) {
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < TRAY_SLOTS; i++) {
       const slot = new Container();
       this.container.addChild(slot);
       this.slots.push(slot);
     }
+    this.holdLabel.anchor.set(0.5, 0);
+    this.slots[HOLD_INDEX].addChild(this.holdFrame, this.holdLabel);
+  }
+
+  private drawHoldFrame(hot: boolean): void {
+    const f = this.holdFrame;
+    f.clear();
+    const inset = 4;
+    f.roundRect(inset, inset, this.slotWidth - inset * 2, this.height - inset * 2, 12)
+      .fill({ color: this.theme.emptyCell, alpha: hot ? 0.55 : 0.28 })
+      .stroke({ color: hot ? 0xffd166 : this.theme.emptyCell, width: hot ? 3 : 2, alpha: hot ? 1 : 0.9 });
+    this.holdLabel.style.fill = hot ? 0xffd166 : this.theme.emptyCell;
+    this.holdLabel.alpha = hot ? 1 : 0.9;
+    this.holdLabel.position.set(this.slotWidth / 2, inset + 3);
   }
 
   setTheme(theme: Theme): void {
@@ -236,7 +278,7 @@ export class TrayView {
 
   resize(length: number, vertical = false): void {
     this.vertical = vertical;
-    this.slotWidth = length / 3;
+    this.slotWidth = length / TRAY_SLOTS;
     this.height = this.slotWidth * 0.9;
     this.slots.forEach((s, i) =>
       s.position.set(vertical ? 0 : i * this.slotWidth, vertical ? i * this.slotWidth : 0),
@@ -250,13 +292,17 @@ export class TrayView {
     return Math.min((this.slotWidth * 0.82) / maxSpan, this.height * 0.8 / maxSpan);
   }
 
-  render(tray: ReadonlyArray<string | null>, hiddenSlot: number | null, tier = 0): void {
+  /** `items` is the 3 dealt pieces followed by the held one. */
+  render(items: ReadonlyArray<string | null>, hiddenSlot: number | null, tier = 0, holdHot = false): void {
+    this.drawHoldFrame(holdHot);
     this.slots.forEach((slot, i) => {
       slot.removeChildren();
-      const id = tray[i];
+      if (i === HOLD_INDEX) slot.addChild(this.holdFrame, this.holdLabel);
+      const id = items[i];
       if (!id || i === hiddenSlot) return;
       const piece = getPiece(id);
-      const cs = this.trayCellSize(id);
+      // the held piece shrinks a touch so the HOLD label stays readable
+      const cs = this.trayCellSize(id) * (i === HOLD_INDEX ? 0.85 : 1);
       const g = new Graphics();
       for (const [c, r] of piece.cells) {
         drawBlock(g, c * cs, r * cs, cs, this.theme.colors[piece.color - 1], tier);
@@ -274,7 +320,7 @@ export class TrayView {
     const across = this.vertical ? localX : localY;
     if (across < -10 || across > (this.vertical ? this.slotWidth : this.height) + 24) return null;
     const i = Math.floor(along / this.slotWidth);
-    return i >= 0 && i < 3 ? i : null;
+    return i >= 0 && i < TRAY_SLOTS ? i : null;
   }
 }
 
@@ -284,12 +330,59 @@ interface Particle {
   vy: number;
   life: number;
   maxLife: number;
+  /** Velocity damping per second (0 = none) — blast debris slows as it flies. */
+  drag?: number;
 }
+
+interface Ring {
+  g: Graphics;
+  x: number;
+  y: number;
+  maxR: number;
+  life: number;
+  maxLife: number;
+  color: number;
+}
+
+const BLAST_COLORS = [0xffd166, 0xff7849, 0xef476f, 0xffffff];
 
 /** Short directional pops when lines clear. Never blocks input. */
 export class ParticleSystem {
   readonly container = new Container();
   private particles: Particle[] = [];
+  private rings: Ring[] = [];
+
+  /** Bomb blast: hot debris flung radially plus a double shockwave ring. */
+  blast(center: number, cellSize: number): void {
+    const x = ((center % BOARD_SIZE) + 0.5) * cellSize;
+    const y = (Math.floor(center / BOARD_SIZE) + 0.5) * cellSize;
+    for (let n = 0; n < 48; n++) {
+      const g = new Graphics();
+      const s = cellSize * (0.14 + Math.random() * 0.22);
+      g.roundRect(-s / 2, -s / 2, s, s, s * 0.25).fill(BLAST_COLORS[n % BLAST_COLORS.length]);
+      g.position.set(x, y);
+      g.rotation = Math.random() * Math.PI;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = cellSize * (8 + Math.random() * 14);
+      this.container.addChild(g);
+      this.particles.push({
+        g,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0,
+        maxLife: 0.45 + Math.random() * 0.25,
+        drag: 3.5,
+      });
+    }
+    this.ring(x, y, cellSize * 3.2, 0.42, 0xffd166);
+    this.ring(x, y, cellSize * 2.2, 0.3, 0xffffff);
+  }
+
+  ring(x: number, y: number, maxR: number, maxLife: number, color: number): void {
+    const g = new Graphics();
+    this.container.addChild(g);
+    this.rings.push({ g, x, y, maxR, life: 0, maxLife, color });
+  }
 
   burst(cellIndices: readonly number[], lines: Lines, cellSize: number, color: number): void {
     const rows = new Set(lines.rows);
@@ -325,12 +418,31 @@ export class ParticleSystem {
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life += dt;
+      if (p.drag) {
+        const k = Math.max(0, 1 - p.drag * dt);
+        p.vx *= k;
+        p.vy *= k;
+      }
       p.g.position.x += p.vx * dt;
       p.g.position.y += p.vy * dt;
       p.g.alpha = Math.max(0, 1 - p.life / p.maxLife);
       if (p.life >= p.maxLife) {
         p.g.destroy();
         this.particles.splice(i, 1);
+      }
+    }
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      const ring = this.rings[i];
+      ring.life += dt;
+      const t = Math.min(1, ring.life / ring.maxLife);
+      const eased = 1 - (1 - t) * (1 - t);
+      ring.g.clear();
+      ring.g.circle(ring.x, ring.y, ring.maxR * eased)
+        .fill({ color: ring.color, alpha: 0.18 * (1 - t) })
+        .stroke({ color: ring.color, width: 6 * (1 - t) + 1, alpha: 1 - t });
+      if (t >= 1) {
+        ring.g.destroy();
+        this.rings.splice(i, 1);
       }
     }
   }

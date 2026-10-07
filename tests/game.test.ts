@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { Game } from '../src/core/game';
+import { Game, HOLD_SLOT } from '../src/core/game';
 import { CELL, idx } from '../src/core/board';
 import { getPiece } from '../src/core/pieces';
 
@@ -100,10 +100,28 @@ describe('placement', () => {
       g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
     }
     g.state.tray = ['DOT_0', 'SQ3_0', null];
+    g.state.rescued = true; // last chance already spent
     const res = g.place(0, 0, 0)!;
     expect(res.linesCleared).toBe(0);
     expect(res.gameOver).toBe(true);
     expect(g.state.over).toBe(true);
+  });
+
+  test('first time stuck: last chance cracks the fullest rows away instead of ending', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    for (let i = 0; i < 64; i++) g.state.board[i] = 1;
+    for (let k = 0; k < 8; k++) {
+      g.state.board[idx(k, k)] = CELL.EMPTY;
+      g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
+    }
+    g.state.tray = ['DOT_0', 'SQ3_0', null];
+    const res = g.place(0, 0, 0)!;
+    expect(res.gameOver).toBe(false);
+    expect(res.lastChance).toBe(true);
+    expect(res.dissolvedRows.length).toBeGreaterThan(0);
+    expect(g.state.rescued).toBe(true);
+    expect(g.state.over).toBe(false);
+    expect(g.totalValidMoves()).toBeGreaterThan(0);
   });
 
   test('perfect clear awards +300', () => {
@@ -126,7 +144,7 @@ describe('placement', () => {
     expect(g.state.score).toBe(1 + 120 + 150);
   });
 
-  test('cleared bomb explodes a 3×3 area', () => {
+  test('cleared bomb explodes the area around it', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
     fillRowExcept(g, 0, 7);
@@ -136,6 +154,47 @@ describe('placement', () => {
     g.place(0, 7, 0);
     expect(g.state.board[idx(3, 1)]).toBe(CELL.EMPTY);
     expect(g.state.aux.bombs[idx(3, 0)]).toBeUndefined();
+  });
+
+  test('cleared bomb blasts 5×5, shatters stone in reach and pays gems it catches', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    g.state.board[idx(3, 0)] = CELL.BOMB;
+    g.state.aux.bombs[idx(3, 0)] = 5;
+    g.state.board[idx(5, 2)] = CELL.STONE;
+    g.state.aux.stones[idx(5, 2)] = 8;
+    g.state.board[idx(1, 2)] = CELL.GEM;
+    g.state.board[idx(6, 2)] = 1; // just outside the blast
+    const res = g.place(0, 7, 0)!;
+    expect(res.blastCenters).toEqual([idx(3, 0)]);
+    expect(g.state.board[idx(5, 2)]).toBe(CELL.EMPTY);
+    expect(g.state.board[idx(1, 2)]).toBe(CELL.EMPTY);
+    expect(g.state.board[idx(6, 2)]).toBe(1);
+    expect(res.gemBonus).toBe(150);
+  });
+
+  test('a line cleared beside a stone shatters it', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    g.state.board[idx(2, 1)] = CELL.STONE;
+    g.state.aux.stones[idx(2, 1)] = 8;
+    const res = g.place(0, 7, 0)!;
+    expect(res.shatteredCells).toEqual([idx(2, 1)]);
+    expect(g.state.board[idx(2, 1)]).toBe(CELL.EMPTY);
+    expect(g.state.aux.stones[idx(2, 1)]).toBeUndefined();
+  });
+
+  test('2-line clear grants a wild zone', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    for (let r = 1; r < 8; r++) g.state.board[idx(7, r)] = 1;
+    g.state.board[idx(0, 5)] = 1; // avoid a perfect clear
+    const res = g.place(0, 7, 0)!;
+    expect(res.linesCleared).toBe(2);
+    expect(g.state.aux.wilds.length).toBe(1);
   });
 
   test('3+ line clear grants a wild zone (board stays clear of it)', () => {
@@ -199,30 +258,108 @@ describe('ghost preview helpers', () => {
   });
 });
 
+describe('hold slot', () => {
+  test('parking a piece frees its tray slot; the held piece can be placed later', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['BAR3_0', 'DOT_0', 'DOT_0'];
+    expect(g.holdPiece(0)).not.toBeNull();
+    expect(g.state.hold).toBe('BAR3_0');
+    expect(g.state.tray[0]).toBeNull();
+    const res = g.place(HOLD_SLOT, 0, 0)!;
+    expect(res).not.toBeNull();
+    expect(g.state.hold).toBeNull();
+    expect(g.state.board[idx(2, 0)]).not.toBe(CELL.EMPTY);
+    expect(g.state.tray).toEqual([null, 'DOT_0', 'DOT_0']); // placing from hold never deals
+  });
+
+  test('holding when something is held swaps the two', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['BAR3_0', 'DOT_0', 'SQ2_0'];
+    g.state.hold = 'T_0';
+    expect(g.holdPiece(2)).not.toBeNull();
+    expect(g.state.hold).toBe('SQ2_0');
+    expect(g.state.tray[2]).toBe('T_0');
+  });
+
+  test('parking the last tray piece deals a fresh tray', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = [null, null, 'SQ2_0'];
+    const deal = g.state.dealNumber;
+    expect(g.holdPiece(2)).not.toBeNull();
+    expect(g.state.dealNumber).toBe(deal + 1);
+    expect(g.state.tray.filter(Boolean).length).toBe(3);
+  });
+
+  test('the held piece keeps the game alive when nothing in the tray fits', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    for (let i = 0; i < 64; i++) g.state.board[i] = 1;
+    for (let k = 0; k < 8; k++) {
+      g.state.board[idx(k, k)] = CELL.EMPTY;
+      g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
+    }
+    g.state.tray = ['DOT_0', 'SQ3_0', null];
+    g.state.hold = 'DOT_0';
+    g.state.rescued = true;
+    const res = g.place(0, 0, 0)!;
+    expect(res.gameOver).toBe(false);
+  });
+
+  test('a hold that deals into a stuck board triggers the last chance', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    // packed board: no deal can fit until rows crack away
+    for (let i = 0; i < 64; i++) g.state.board[i] = 1;
+    g.state.tray = [null, null, 'SQ3_0'];
+    const out = g.holdPiece(2)!;
+    expect(out.lastChance).toBe(true);
+    expect(out.gameOver).toBe(false);
+    expect(g.totalValidMoves()).toBeGreaterThan(0);
+  });
+
+  test('cannot hold from the hold slot or an empty slot', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = [null, 'DOT_0', 'DOT_0'];
+    expect(g.holdPiece(0)).toBeNull();
+    expect(g.holdPiece(HOLD_SLOT)).toBeNull();
+  });
+});
+
 describe('power-ups', () => {
-  test('rotate turns a tray piece into its 90° variant, once per game', () => {
+  test('rotate turns a tray piece into its 90° variant, twice per game', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['BAR3_0', 'DOT_0', 'DOT_0'];
     expect(g.useRotate(0)).toBe(true);
     expect(getPiece(g.state.tray[0]!).w).toBe(1);
     expect(getPiece(g.state.tray[0]!).h).toBe(3);
+    expect(g.useRotate(0)).toBe(true);
+    expect(getPiece(g.state.tray[0]!).w).toBe(3);
     expect(g.useRotate(0)).toBe(false);
   });
 
-  test('swap replaces the whole tray, once per game', () => {
+  test('rotate works on the held piece', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.hold = 'BAR3_0';
+    expect(g.useRotate(HOLD_SLOT)).toBe(true);
+    expect(getPiece(g.state.hold!).h).toBe(3);
+  });
+
+  test('swap replaces the whole tray, twice per game', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['DOT_0', null, 'DOT_0'];
     expect(g.useSwap()).toBe(true);
     expect(g.state.tray.filter(Boolean).length).toBe(3);
+    expect(g.useSwap()).toBe(true);
     expect(g.useSwap()).toBe(false);
   });
 
-  test('hammer deletes one filled cell, once per game', () => {
+  test('hammer deletes one filled cell, twice per game', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.board[idx(2, 2)] = 1;
+    g.state.board[idx(3, 3)] = 1;
+    g.state.board[idx(4, 4)] = 1;
     expect(g.useHammer(2, 2)).toBe(true);
     expect(g.state.board[idx(2, 2)]).toBe(CELL.EMPTY);
-    expect(g.useHammer(2, 2)).toBe(false); // already used (and empty anyway)
+    expect(g.useHammer(3, 3)).toBe(true);
+    expect(g.useHammer(4, 4)).toBe(false);
   });
 
   test('hammer on an empty cell does not consume the use', () => {
@@ -250,13 +387,37 @@ describe('power-ups', () => {
     expect(g.useUndo()).toBe(false);
   });
 
-  test('undo only once per game', () => {
+  test('undo twice per game at most', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
     g.place(0, 3, 3);
     expect(g.useUndo()).toBe(true);
     g.place(0, 3, 3);
+    expect(g.useUndo()).toBe(true);
+    g.place(0, 3, 3);
     expect(g.useUndo()).toBe(false);
+  });
+
+  test('power-ups spent after a placement stay spent when it is undone', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    g.state.board[idx(6, 6)] = 1;
+    g.place(0, 3, 3);
+    expect(g.useHammer(6, 6)).toBe(true);
+    expect(g.useUndo()).toBe(true);
+    expect(g.state.used.hammer).toBe(1);
+    expect(g.state.used.undo).toBe(1);
+  });
+
+  test('a power-up is earned every 15 cleared lines', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.totalLines = 14;
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    g.state.board[idx(0, 7)] = 1; // avoid a perfect clear (which also earns one)
+    const res = g.place(0, 7, 0)!;
+    expect(res.linesCleared).toBe(1);
+    expect(res.earned.length).toBe(1);
   });
 });
 

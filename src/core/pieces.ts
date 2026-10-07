@@ -1,9 +1,9 @@
 /**
- * Piece catalog. 12 logical shapes expand into 27 dealt variants — the player
+ * Piece catalog. 14 logical shapes expand into 31 dealt variants — the player
  * cannot rotate pieces, so each rotation is dealt as a distinct piece.
- * Weights are per logical shape (3×3 rare 0.4, 1×1 common 0.6, mid 1.0) and are
- * split evenly across that shape's variants so rotation count doesn't change
- * how often a logical shape appears.
+ * Weights are per logical shape and lean small: forgiving pieces (dot, 1×2,
+ * diagonals) are common, the 1×5 and 3×3 rare. They are split evenly across a
+ * shape's variants so rotation count doesn't change how often it appears.
  */
 export type Cell = readonly [number, number]; // [col, row]
 
@@ -46,11 +46,11 @@ interface ShapeDef {
 }
 
 const SHAPE_DEFS: ShapeDef[] = [
-  { shape: 'DOT', weight: 0.6, color: 1, base: [[0, 0]], rotations: 1 },
-  { shape: 'BAR2', weight: 1.0, color: 2, base: [[0, 0], [1, 0]], rotations: 2 },
+  { shape: 'DOT', weight: 1.0, color: 1, base: [[0, 0]], rotations: 1 },
+  { shape: 'BAR2', weight: 1.2, color: 2, base: [[0, 0], [1, 0]], rotations: 2 },
   { shape: 'BAR3', weight: 1.0, color: 2, base: [[0, 0], [1, 0], [2, 0]], rotations: 2 },
   { shape: 'BAR4', weight: 1.0, color: 3, base: [[0, 0], [1, 0], [2, 0], [3, 0]], rotations: 2 },
-  { shape: 'BAR5', weight: 1.0, color: 3, base: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], rotations: 2 },
+  { shape: 'BAR5', weight: 0.6, color: 3, base: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], rotations: 2 },
   { shape: 'SQ2', weight: 1.0, color: 4, base: [[0, 0], [1, 0], [0, 1], [1, 1]], rotations: 1 },
   {
     shape: 'SQ3',
@@ -64,6 +64,9 @@ const SHAPE_DEFS: ShapeDef[] = [
   { shape: 'S', weight: 1.0, color: 7, base: [[1, 0], [2, 0], [0, 1], [1, 1]], rotations: 2 },
   { shape: 'Z', weight: 1.0, color: 7, base: [[0, 0], [1, 0], [1, 1], [2, 1]], rotations: 2 },
   { shape: 'T', weight: 1.0, color: 8, base: [[0, 0], [1, 0], [2, 0], [1, 1]], rotations: 4 },
+  // diagonals: corner-touching cells that slot into checkerboard-style holes
+  { shape: 'DIAG2', weight: 0.8, color: 1, base: [[0, 0], [1, 1]], rotations: 2 },
+  { shape: 'DIAG3', weight: 0.5, color: 4, base: [[0, 0], [1, 1], [2, 2]], rotations: 2 },
 ];
 
 function buildCatalog(): Piece[] {

@@ -83,6 +83,38 @@ export class GameAudio {
     notes.forEach((f, i) => this.tone(f, 0.3, 'triangle', i * 0.09, 0.9));
   }
 
+  /** Bomb blast: a falling sub-bass thump under a burst of filtered noise. */
+  boom(): void {
+    if (!this.ctx || !this.master || this.ctx.state !== 'running') return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const thump = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(140, t0);
+    osc.frequency.exponentialRampToValueAtTime(38, t0 + 0.45);
+    thump.gain.setValueAtTime(1.4, t0);
+    thump.gain.exponentialRampToValueAtTime(0.001, t0 + 0.55);
+    osc.connect(thump).connect(this.master);
+    osc.start(t0);
+    osc.stop(t0 + 0.6);
+
+    const len = Math.floor(ctx.sampleRate * 0.5);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.setValueAtTime(2400, t0);
+    lowpass.frequency.exponentialRampToValueAtTime(200, t0 + 0.45);
+    const crackle = ctx.createGain();
+    crackle.gain.value = 0.9;
+    noise.connect(lowpass).connect(crackle).connect(this.master);
+    noise.start(t0);
+  }
+
   powerUp(): void {
     this.tone(660, 0.12, 'square', 0, 0.3);
     this.tone(880, 0.15, 'square', 0.08, 0.3);

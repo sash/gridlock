@@ -59,13 +59,22 @@ describe('piece catalog', () => {
     }
   });
 
-  test('3x3 is rarer and 1x1 more common than mid pieces (per logical shape)', () => {
+  test('weights lean small: dot and 1×2 common, 1×5 and 3×3 rare (per logical shape)', () => {
     const weightOf = (shape: string) =>
       PIECES.filter((p) => p.shape === shape).reduce((s, p) => s + p.weight, 0);
     expect(weightOf('SQ3')).toBeCloseTo(0.4);
-    expect(weightOf('DOT')).toBeCloseTo(0.6);
+    expect(weightOf('DOT')).toBeCloseTo(1.0);
+    expect(weightOf('BAR2')).toBeCloseTo(1.2);
+    expect(weightOf('BAR5')).toBeCloseTo(0.6);
     expect(weightOf('BAR3')).toBeCloseTo(1.0);
     expect(weightOf('T')).toBeCloseTo(1.0);
+  });
+
+  test('diagonal pairs and triples come in both orientations', () => {
+    const diag2 = PIECES.filter((p) => p.shape === 'DIAG2').map((p) => cellKey(p.cells));
+    const diag3 = PIECES.filter((p) => p.shape === 'DIAG3').map((p) => cellKey(p.cells));
+    expect(diag2.sort()).toEqual(['0,0;1,1', '0,1;1,0']);
+    expect(diag3.sort()).toEqual(['0,0;1,1;2,2', '0,2;1,1;2,0']);
   });
 
   test('getPiece returns the variant by id', () => {

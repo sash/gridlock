@@ -2,7 +2,8 @@ import { describe, expect, test } from 'vitest';
 import { Rng } from '../src/core/rng';
 import { idx, type Board } from '../src/core/board';
 import { getPiece } from '../src/core/pieces';
-import { dealTray, isSetPlaceable, canCompleteAlmostFullLine } from '../src/core/generator';
+import { dealSingle, dealTray, isSetPlaceable, canCompleteAlmostFullLine } from '../src/core/generator';
+import { anyFit } from '../src/core/board';
 
 function board(fill: (c: number, r: number) => boolean): Board {
   const b = new Uint8Array(64);
@@ -47,11 +48,12 @@ describe('dealTray', () => {
     }
   });
 
-  test('board ≥40% full → unplaceable deals are allowed (no rigged wins)', () => {
-    // checkerboard: 50% full, only DOT fits anywhere
-    const b = board((c, r) => (c + r) % 2 === 0);
+  test('crowded board → unplaceable deals still happen (no rigged wins)', () => {
+    // 75% full: rows 0-5 packed except a single hole per row, rows 6-7 empty
+    // except a comb — only small pieces fit, and only in few places
+    const b = board((c, r) => (r < 6 ? c !== (r * 3) % 8 : c % 2 === 0));
     let sawUnplaceable = false;
-    for (let seed = 0; seed < 60 && !sawUnplaceable; seed++) {
+    for (let seed = 0; seed < 300 && !sawUnplaceable; seed++) {
       const tray = dealTray(b, new Rng(seed), 0);
       if (!isSetPlaceable(b, tray)) sawUnplaceable = true;
     }
@@ -74,14 +76,25 @@ describe('dealTray', () => {
     expect(sq3).toBeLessThan(bar3 * 0.7);
   });
 
-  test('pity rule: after 4 clear-less deals, set contains a piece completing an almost-full line', () => {
+  test('pity rule: after 2 clear-less deals, set contains a piece completing an almost-full line', () => {
     // row 5 missing exactly 2 cells at (6,5) and (7,5) → BAR2_0 completes it
     const b = board((c, r) => r === 5 && c < 6);
     for (let seed = 0; seed < 100; seed++) {
-      const tray = dealTray(b, new Rng(seed), 4);
+      const tray = dealTray(b, new Rng(seed), 2);
       const hasCompleter = tray.some((id) => canCompleteAlmostFullLine(b, getPiece(id)));
       expect(hasCompleter, `seed ${seed}`).toBe(true);
     }
+  });
+});
+
+describe('dealSingle (Rush refill)', () => {
+  test('rerolls toward a piece that fits the board', () => {
+    // only single isolated holes → only DOT fits
+    const b = board((c, r) => !(c % 3 === 0 && r % 3 === 0));
+    let fits = 0;
+    for (let seed = 0; seed < 200; seed++) if (anyFit(b, getPiece(dealSingle(b, new Rng(seed))))) fits++;
+    // a raw draw is a DOT ~1 time in 13; five rerolls lift that well past a third
+    expect(fits).toBeGreaterThan(60);
   });
 });
 

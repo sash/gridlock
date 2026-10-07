@@ -1,5 +1,5 @@
 import { Rng } from './rng';
-import { PIECES, getPiece, rotatePiece } from './pieces';
+import { getPiece, rotatePiece } from './pieces';
 import {
   BOARD_SIZE,
   CELL,
@@ -18,12 +18,13 @@ import {
   createSpecialsState,
   explodeBomb,
   grantWild,
+  shatterStones,
   spawnOnDeal,
   tickPlacement,
   wildAura,
   type SpecialsState,
 } from './specials';
-import { dealTray } from './generator';
+import { dealSingle, dealTray } from './generator';
 
 export type Mode = 'classic' | 'daily' | 'rush' | 'zen';
 export type PowerUpKind = 'rotate' | 'swap' | 'hammer' | 'undo';
@@ -34,6 +35,14 @@ const ZEN_DISSOLVE_ROWS = 2;
 const MAX_TIME_TARGETS = 3;
 const MIN_TARGET_SECONDS = 2;
 const MAX_TARGET_SECONDS = 5;
+/** Tray index that addresses the hold slot (the 3 dealt pieces are 0..2). */
+export const HOLD_SLOT = 3;
+/** Uses of each power-up allowed per game. */
+export const MAX_POWERUP_USES = 2;
+/** A random power-up is earned every this many cleared lines. */
+export const POWERUP_EVERY_LINES = 15;
+/** Clearing at least this many lines at once grants a wild zone. */
+export const WILD_MIN_LINES = 2;
 
 export interface GameState {
   mode: Mode;
@@ -41,6 +50,8 @@ export interface GameState {
   /** 1 where a block has ever been placed this game — specials prefer virgin cells. */
   touched: Uint8Array;
   tray: (string | null)[];
+  /** Parked piece — placeable any time, doesn't count toward the next deal. */
+  hold: string | null;
   score: number;
   streak: number;
   misses: number;
@@ -53,7 +64,10 @@ export interface GameState {
   clearedThisDeal: boolean;
   lastPlacementCleared: boolean;
   aux: SpecialsState;
-  used: Record<PowerUpKind, boolean>;
+  /** Power-up uses this game (max MAX_POWERUP_USES each). */
+  used: Record<PowerUpKind, number>;
+  /** The once-per-game last-chance rescue has been spent. */
+  rescued: boolean;
   over: boolean;
   rushTimeLeft: number | null;
 }
@@ -71,15 +85,26 @@ export interface PlaceResult {
   gemBonus: number;
   clearedCells: number[];
   explodedCells: number[];
+  /** Bombs that went off this placement (chain reactions included) — for the blast FX. */
+  blastCenters: number[];
   crackedCells: number[];
+  /** Stones shattered early by a clear touching them. */
+  shatteredCells: number[];
   perfectClear: boolean;
   gameOver: boolean;
   zenDissolved: boolean;
+  /** The once-per-game rescue fired: rows cracked away instead of game over. */
+  lastChance: boolean;
+  /** Rows the rescue (or Zen) dissolved. */
+  dissolvedRows: number[];
   /** Rush: bonus seconds banked by clearing time targets. */
   timeGained: number;
   /** Power-ups earned this placement (streak cap, perfect clear). */
   earned: PowerUpKind[];
 }
+
+/** How a move that can leave the board stuck resolved it. */
+export type StuckOutcome = Pick<PlaceResult, 'gameOver' | 'zenDissolved' | 'lastChance' | 'dissolvedRows'>;
 
 export interface GameOptions {
   mode: Mode;
@@ -98,6 +123,7 @@ export class Game {
       board: new Uint8Array(BOARD_SIZE * BOARD_SIZE),
       touched: new Uint8Array(BOARD_SIZE * BOARD_SIZE),
       tray: [null, null, null],
+      hold: null,
       score: 0,
       streak: 0,
       misses: 0,
@@ -109,7 +135,8 @@ export class Game {
       clearedThisDeal: false,
       lastPlacementCleared: false,
       aux: createSpecialsState(),
-      used: { rotate: false, swap: false, hammer: false, undo: false },
+      used: { rotate: 0, swap: 0, hammer: 0, undo: 0 },
+      rescued: false,
       over: false,
       rushTimeLeft: opts.mode === 'rush' ? RUSH_SECONDS : null,
     };
@@ -135,15 +162,20 @@ export class Game {
     this.state.rngState = this.rng.getState();
   }
 
+  /** Piece in a tray slot, or the held piece for HOLD_SLOT. */
+  pieceAt(slot: number): string | null {
+    return slot === HOLD_SLOT ? this.state.hold : (this.state.tray[slot] ?? null);
+  }
+
   canPlaceAt(slot: number, col: number, row: number): boolean {
-    const id = this.state.tray[slot];
+    const id = this.pieceAt(slot);
     if (!id || this.state.over) return false;
     return canPlace(this.state.board, getPiece(id), col, row);
   }
 
   /** Lines a drop would complete — for the ghost preview glow. Null if invalid. */
   wouldClear(slot: number, col: number, row: number): Lines | null {
-    const id = this.state.tray[slot];
+    const id = this.pieceAt(slot);
     if (!id || !this.canPlaceAt(slot, col, row)) return null;
     const copy = new Uint8Array(this.state.board);
     place(copy, getPiece(id), col, row);
@@ -152,15 +184,37 @@ export class Game {
 
   totalValidMoves(): number {
     let n = 0;
-    for (const id of this.state.tray) {
+    for (const id of [...this.state.tray, this.state.hold]) {
       if (id) n += validPlacements(this.state.board, getPiece(id)).length;
     }
     return n;
   }
 
-  place(slot: number, col: number, row: number): PlaceResult | null {
+  /**
+   * Park a tray piece in the hold slot. If something is already held, the two
+   * trade places. Parking the last tray piece triggers the next deal, so
+   * pieces are never discarded — just postponed.
+   */
+  holdPiece(slot: number): StuckOutcome | null {
     const s = this.state;
     const id = s.tray[slot];
+    if (s.over || slot === HOLD_SLOT || !id) return null;
+    s.tray[slot] = s.hold;
+    s.hold = id;
+    if (s.tray[slot] === null) {
+      if (s.mode === 'rush') s.tray[slot] = this.dealOne();
+      else if (s.tray.every((t) => t === null)) this.newDeal();
+    }
+    // a fresh deal can leave nothing placeable, same as a placement can
+    const outcome: StuckOutcome = { gameOver: false, zenDissolved: false, lastChance: false, dissolvedRows: [] };
+    this.resolveStuckBoard(outcome);
+    this.syncRng();
+    return outcome;
+  }
+
+  place(slot: number, col: number, row: number): PlaceResult | null {
+    const s = this.state;
+    const id = this.pieceAt(slot);
     if (s.over || !id) return null;
     const piece = getPiece(id);
     if (!canPlace(s.board, piece, col, row)) return null;
@@ -175,10 +229,14 @@ export class Game {
       gemBonus: 0,
       clearedCells: [],
       explodedCells: [],
+      blastCenters: [],
       crackedCells: [],
+      shatteredCells: [],
       perfectClear: false,
       gameOver: false,
       zenDissolved: false,
+      lastChance: false,
+      dissolvedRows: [],
       timeGained: 0,
       earned: [],
     };
@@ -196,19 +254,24 @@ export class Game {
     result.clearedCells = clearRes.clearedCells;
     result.crackedCells = clearRes.cracked;
 
+    const lineCells = new Set<number>();
+    for (const r of lines.rows) for (let c = 0; c < BOARD_SIZE; c++) lineCells.add(idx(c, r));
+    for (const c of lines.cols) for (let r = 0; r < BOARD_SIZE; r++) lineCells.add(idx(c, r));
     // a clear through a wild zone consumes that wild
     if (result.linesCleared > 0 && s.aux.wilds.length > 0) {
-      const lineCells = new Set<number>();
-      for (const r of lines.rows) for (let c = 0; c < BOARD_SIZE; c++) lineCells.add(idx(c, r));
-      for (const c of lines.cols) for (let r = 0; r < BOARD_SIZE; r++) lineCells.add(idx(c, r));
       s.aux.wilds = s.aux.wilds.filter(
         (center) => ![...wildAura([center])].some((cell) => lineCells.has(cell)),
       );
     }
+    if (result.linesCleared > 0) result.shatteredCells = shatterStones(s.board, s.aux, lineCells);
 
+    let blastGems = 0;
     for (const bombIdx of clearRes.bombs) {
-      result.explodedCells.push(...explodeBomb(s.board, s.aux, bombIdx));
-      delete s.aux.bombs[bombIdx];
+      if (result.blastCenters.includes(bombIdx)) continue; // already chained
+      const blast = explodeBomb(s.board, s.aux, bombIdx);
+      result.explodedCells.push(...blast.cleared);
+      result.blastCenters.push(...blast.centers);
+      blastGems += blast.gems.length;
     }
 
     const cleared = result.linesCleared > 0;
@@ -227,7 +290,12 @@ export class Game {
     s.lastPlacementCleared = cleared;
     if (cleared) this.undoSnapshot = null; // undo is disabled after a clear
 
-    result.gemBonus = clearRes.gems.length * GEM_BONUS;
+    const milestonesBefore = Math.floor((s.totalLines - result.linesCleared) / POWERUP_EVERY_LINES);
+    if (Math.floor(s.totalLines / POWERUP_EVERY_LINES) > milestonesBefore) {
+      result.earned.push(this.randomPowerUp());
+    }
+
+    result.gemBonus = (clearRes.gems.length + blastGems) * GEM_BONUS;
     s.score += result.gemBonus;
 
     result.perfectClear = s.board.every((v) => v === CELL.EMPTY);
@@ -236,16 +304,20 @@ export class Game {
       result.earned.push(this.randomPowerUp());
     }
 
-    if (result.linesCleared >= 3) grantWild(s.board, this.rng, s.touched, s.aux);
+    if (result.linesCleared >= WILD_MIN_LINES) grantWild(s.board, this.rng, s.touched, s.aux);
 
     tickPlacement(s.board, s.aux);
     this.updateTimeTargets(result);
 
-    s.tray[slot] = null;
-    if (s.mode === 'rush') {
-      s.tray[slot] = this.dealOne();
-    } else if (s.tray.every((t) => t === null)) {
-      this.newDeal();
+    if (slot === HOLD_SLOT) {
+      s.hold = null;
+    } else {
+      s.tray[slot] = null;
+      if (s.mode === 'rush') {
+        s.tray[slot] = this.dealOne();
+      } else if (s.tray.every((t) => t === null)) {
+        this.newDeal();
+      }
     }
 
     this.resolveStuckBoard(result);
@@ -284,7 +356,7 @@ export class Game {
   }
 
   private dealOne(): string {
-    return this.rng.weightedPick(PIECES, PIECES.map((p) => p.weight)).id;
+    return dealSingle(this.state.board, this.rng);
   }
 
   private newDeal(): void {
@@ -300,22 +372,32 @@ export class Game {
     return this.totalValidMoves() > 0;
   }
 
-  private resolveStuckBoard(result: PlaceResult): void {
+  private resolveStuckBoard(result: StuckOutcome): void {
     const s = this.state;
     if (this.hasAnyMove()) return;
-    if (s.mode !== 'zen') {
-      s.over = true;
-      result.gameOver = true;
+    if (s.mode === 'zen') {
+      // Zen: the fullest rows dissolve (2 per pass) until something fits again
+      for (let pass = 0; pass < 4 && !this.hasAnyMove(); pass++) {
+        result.dissolvedRows.push(...this.dissolveFullestRows(ZEN_DISSOLVE_ROWS));
+        result.zenDissolved = true;
+      }
       return;
     }
-    // Zen: the fullest rows dissolve (2 per pass) until something fits again
-    for (let pass = 0; pass < 4 && !this.hasAnyMove(); pass++) {
-      this.dissolveFullestRows();
-      result.zenDissolved = true;
+    if (!s.rescued) {
+      // last chance, once per game: the fullest rows crack away one at a time
+      // until a piece fits again
+      s.rescued = true;
+      for (let pass = 0; pass < BOARD_SIZE && !this.hasAnyMove(); pass++) {
+        result.dissolvedRows.push(...this.dissolveFullestRows(1));
+      }
+      result.lastChance = true;
+      return;
     }
+    s.over = true;
+    result.gameOver = true;
   }
 
-  private dissolveFullestRows(): void {
+  private dissolveFullestRows(n: number): number[] {
     const s = this.state;
     const counts = Array.from({ length: BOARD_SIZE }, (_, r) => {
       let n = 0;
@@ -323,14 +405,17 @@ export class Game {
       return { r, n };
     });
     counts.sort((a, b) => b.n - a.n || a.r - b.r);
-    for (const { r } of counts.slice(0, ZEN_DISSOLVE_ROWS)) {
+    const rows = counts.slice(0, n).map(({ r }) => r);
+    for (const r of rows) {
       for (let c = 0; c < BOARD_SIZE; c++) {
         const i = idx(c, r);
         s.board[i] = CELL.EMPTY;
         delete s.aux.bombs[i];
         delete s.aux.stones[i];
+        delete s.aux.times[i];
       }
     }
+    return rows;
   }
 
   private randomPowerUp(): PowerUpKind {
@@ -352,20 +437,26 @@ export class Game {
 
   // --- Power-ups (max 1 use of each per game) ---
 
+  /** Uses of this power-up left in the current game. */
+  usesLeft(kind: PowerUpKind): number {
+    return MAX_POWERUP_USES - this.state.used[kind];
+  }
+
   useRotate(slot: number): boolean {
     const s = this.state;
-    const id = s.tray[slot];
-    if (s.used.rotate || s.over || !id) return false;
-    s.tray[slot] = rotatePiece(id);
-    s.used.rotate = true;
+    const id = this.pieceAt(slot);
+    if (this.usesLeft('rotate') <= 0 || s.over || !id) return false;
+    if (slot === HOLD_SLOT) s.hold = rotatePiece(id);
+    else s.tray[slot] = rotatePiece(id);
+    s.used.rotate++;
     return true;
   }
 
   useSwap(): boolean {
     const s = this.state;
-    if (s.used.swap || s.over) return false;
+    if (this.usesLeft('swap') <= 0 || s.over) return false;
     s.tray = dealTray(s.board, this.rng, s.dealsSinceClear);
-    s.used.swap = true;
+    s.used.swap++;
     this.syncRng();
     return true;
   }
@@ -373,22 +464,24 @@ export class Game {
   useHammer(col: number, row: number): boolean {
     const s = this.state;
     const i = idx(col, row);
-    if (s.used.hammer || s.over || !isFilled(s.board[i])) return false;
+    if (this.usesLeft('hammer') <= 0 || s.over || !isFilled(s.board[i])) return false;
     s.board[i] = CELL.EMPTY;
     delete s.aux.bombs[i];
     delete s.aux.stones[i];
     delete s.aux.times[i]; // hammering a target forfeits it
-    s.used.hammer = true;
+    s.used.hammer++;
     return true;
   }
 
   useUndo(): boolean {
     const s = this.state;
-    if (s.used.undo || s.over || !this.undoSnapshot || s.lastPlacementCleared) return false;
+    if (this.usesLeft('undo') <= 0 || s.over || !this.undoSnapshot || s.lastPlacementCleared) return false;
+    // power-ups spent since the snapshot stay spent
+    const used = { ...s.used, undo: s.used.undo + 1 };
     this.state = this.undoSnapshot;
     this.undoSnapshot = null;
     this.rng.setState(this.state.rngState);
-    this.state.used.undo = true;
+    this.state.used = used;
     return true;
   }
 
@@ -410,6 +503,11 @@ export class Game {
       delete legacy.grace;
     }
     legacy.totalLines ??= 0;
+    const migrated = rest as { hold?: string | null; rescued?: boolean; used: Record<PowerUpKind, number | boolean> };
+    migrated.hold ??= null;
+    migrated.rescued ??= false;
+    // saves from the one-use-per-game era stored booleans
+    for (const k of Object.keys(migrated.used) as PowerUpKind[]) migrated.used[k] = Number(migrated.used[k]);
     const aux = rest.aux as { times?: Record<number, number>; wilds?: number[] };
     aux.times ??= {};
     aux.wilds ??= [];
