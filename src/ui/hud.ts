@@ -245,7 +245,7 @@ export class Hud {
             <li>▪️ 1 point per cell placed</li>
             <li>▪️ Clears: 1 line = 80 · 2 = 200 · 3 = 450 · 4+ = 800 and up</li>
             <li>🔥 Back-to-back clears build a streak that multiplies line points, up to ×5.
-            It survives two placements without a clear — the flame dims as it cools.
+            It survives three placements without a clear — the flame dims as it cools.
             When the screen edges glow warm, your streak is hot (×2.5+).</li>
             <li>✨ Emptying the entire board: +300 Perfect Clear</li>
             <li>⬆️ Every 3 cleared lines you <b>level up</b> — watch your blocks evolve from flat
@@ -291,7 +291,7 @@ export class Hud {
     this.el('gl-newgame-btn').addEventListener('click', () => cb.onRestart());
     this.el('gl-flame').addEventListener('click', () => {
       if (this.el('gl-flame').textContent) {
-        this.toast('🔥 Streak: clear lines back-to-back to multiply line points, up to ×5. It survives two placements without a clear — the dimming flame is your warning. The glowing screen edge means you’re hot (×2.5+).', 4200);
+        this.toast('🔥 Streak: clear lines back-to-back to multiply line points, up to ×5. It survives three placements without a clear — the dimming flame is your warning. The glowing screen edge means you’re hot (×2.5+).', 4200);
       }
     });
     this.el('gl-help-btn-game').addEventListener('click', () => this.showHelp());
@@ -361,7 +361,7 @@ export class Hud {
       return;
     }
     flame.textContent = `🔥 ×${multiplier}`;
-    flame.style.opacity = ['1', '0.65', '0.35'][Math.min(misses, 2)];
+    flame.style.opacity = ['1', '0.75', '0.5', '0.3'][Math.min(misses, 3)];
   }
 
   /** Level ladder: every 10 lines levels you up and evolves the block material. */

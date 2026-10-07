@@ -35,13 +35,14 @@ describe('streak state machine (two-placement grace)', () => {
     expect(updateStreak({ streak: 3, misses: 2 }, true)).toEqual({ streak: 4, misses: 0 });
   });
 
-  test('streak survives two consecutive non-clearing placements', () => {
+  test('streak survives three consecutive non-clearing placements', () => {
     expect(updateStreak({ streak: 3, misses: 0 }, false)).toEqual({ streak: 3, misses: 1 });
     expect(updateStreak({ streak: 3, misses: 1 }, false)).toEqual({ streak: 3, misses: 2 });
+    expect(updateStreak({ streak: 3, misses: 2 }, false)).toEqual({ streak: 3, misses: 3 });
   });
 
-  test('third consecutive non-clearing placement kills the streak', () => {
-    expect(updateStreak({ streak: 3, misses: 2 }, false)).toEqual({ streak: 0, misses: 0 });
+  test('fourth consecutive non-clearing placement kills the streak', () => {
+    expect(updateStreak({ streak: 3, misses: 3 }, false)).toEqual({ streak: 0, misses: 0 });
   });
 
   test('no streak and no clear stays at zero', () => {

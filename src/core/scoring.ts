@@ -14,7 +14,7 @@ export function streakMultiplier(streak: number): number {
 }
 
 /** Non-clearing placements a streak survives; it dies on the next one. */
-export const STREAK_GRACE = 2;
+export const STREAK_GRACE = 3;
 
 export interface StreakState {
   streak: number;

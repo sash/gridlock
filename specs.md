@@ -73,7 +73,7 @@ Pure random feels unfair. Use a **weighted bag with a solvability check**:
 ### Streak multiplier (the addiction engine)
 
 - Clearing at least one line on a placement increments the **streak counter**.
-- Each placement *without* a clear cools it (grace: streak survives two non-clearing placements, dies on the third — tuned up from one after playtesting; one grace fought the natural place-place-clear cadence of a 3-piece tray).
+- Each placement *without* a clear cools it (grace: streak survives three non-clearing placements, dies on the fourth — tuned up from one, then two, after playtesting; a whole tray can now go by without a clear and the streak lives).
 - Line points are multiplied by `1 + 0.5 × streak` (streak 1 → ×1.5, streak 4 → ×3, cap ×5).
 - UI shows the streak as a flame meter that visibly “cools” so the player feels the grace period.
 
