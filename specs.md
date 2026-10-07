@@ -31,9 +31,9 @@ No gravity, no timer (in the base mode). The tension comes entirely from spatial
 |-----------|--------------------------------------------------|
 |Dots & bars|1×1, 1×2, 1×3, 1×4, 1×5 (and vertical variants)   |
 |Squares    |2×2, 3×3                                          |
-|L-shapes   |L-tromino (4 rotations), L-tetromino (4 rotations)|
+|L-shapes   |L-tromino (4 rotations), L-tetromino and its mirror J (4 rotations each — no player flipping, so both chiralities must be dealt)|
 |S/Z & T    |S, Z, T tetrominoes (fixed rotations as dealt)    |
-|Diagonals  |2-cell and 3-cell corner-touching diagonals (2 orientations each) — slot into checkerboard-style holes|
+|Diagonal   |2-cell corner-touching diagonal (2 orientations) — slots into checkerboard-style holes|
 
 - **Pieces cannot be rotated by the player.** Rotation variants are dealt as distinct pieces. (This is a deliberate design choice — it makes each deal a real puzzle. See §7 for a power-up that bends this rule.)
 - Each piece has a color, purely cosmetic (color does not affect matching).
@@ -42,7 +42,7 @@ No gravity, no timer (in the base mode). The tension comes entirely from spatial
 
 Pure random feels unfair. Use a **weighted bag with a solvability check**:
 
-1. Generate a candidate set of 3 from weighted probabilities, leaning small: 1×2 1.2, 1×1 1.0, mid pieces 1.0, diagonal pair 0.8, 1×5 0.6, diagonal triple 0.5, 3×3 0.4. From **50% full**, pieces of ≤3 cells are ×1.6 likelier and pieces of ≥5 cells ×0.6.
+1. Generate a candidate set of 3 from weighted probabilities, leaning small: 1×3 and L-tromino 1.3, 1×2 1.2, 1×1 / 2×2 / 1×4 / L / J 1.0, S / Z / T / diagonal pair 0.8, 1×5 0.6, 3×3 0.4. From **50% full**, pieces of ≤3 cells are ×1.6 likelier and pieces of ≥5 cells ×0.6. Weights are tuned with the balance simulator (`SIM=1 npx vitest run tests/sim.test.ts`: a greedy bot plays 1000 games per candidate catalog; adding J was worth +10% game length, favouring 3-cell pieces another +4%, the 3-cell diagonal nothing).
 1. Simulate: does at least one ordering of the 3 pieces fit on the current board?
 1. If not, reroll — up to **5 times below 40% full, 3 times up to 60%, once above**. Fewer cheap mid-game deaths, while a truly jammed board still ends the game.
 1. If no ordering fits after the budget → game over is legitimate, deal it anyway (don’t rig wins).

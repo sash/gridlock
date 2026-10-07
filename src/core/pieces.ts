@@ -1,8 +1,10 @@
 /**
- * Piece catalog. 14 logical shapes expand into 31 dealt variants — the player
- * cannot rotate pieces, so each rotation is dealt as a distinct piece.
- * Weights are per logical shape and lean small: forgiving pieces (dot, 1×2,
- * diagonals) are common, the 1×5 and 3×3 rare. They are split evenly across a
+ * Piece catalog. 14 logical shapes expand into 33 dealt variants — the player
+ * cannot rotate (or flip) pieces, so each rotation is dealt as a distinct
+ * piece, and L and its mirror J are both here. Weights are per logical shape
+ * and lean small: 3-cell pieces are the most forgiving and still finish lines,
+ * so they are the most common; the 1×5 and 3×3 are rare. Tuned with the
+ * balance simulator in tests/sim.test.ts. Weights are split evenly across a
  * shape's variants so rotation count doesn't change how often it appears.
  */
 export type Cell = readonly [number, number]; // [col, row]
@@ -37,7 +39,7 @@ function key(cells: readonly Cell[]): string {
     .join(';');
 }
 
-interface ShapeDef {
+export interface ShapeDef {
   shape: string;
   weight: number;
   color: number;
@@ -45,10 +47,10 @@ interface ShapeDef {
   rotations: number; // distinct rotations dealt (1, 2 or 4)
 }
 
-const SHAPE_DEFS: ShapeDef[] = [
+export const SHAPE_DEFS: readonly ShapeDef[] = [
   { shape: 'DOT', weight: 1.0, color: 1, base: [[0, 0]], rotations: 1 },
   { shape: 'BAR2', weight: 1.2, color: 2, base: [[0, 0], [1, 0]], rotations: 2 },
-  { shape: 'BAR3', weight: 1.0, color: 2, base: [[0, 0], [1, 0], [2, 0]], rotations: 2 },
+  { shape: 'BAR3', weight: 1.3, color: 2, base: [[0, 0], [1, 0], [2, 0]], rotations: 2 },
   { shape: 'BAR4', weight: 1.0, color: 3, base: [[0, 0], [1, 0], [2, 0], [3, 0]], rotations: 2 },
   { shape: 'BAR5', weight: 0.6, color: 3, base: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]], rotations: 2 },
   { shape: 'SQ2', weight: 1.0, color: 4, base: [[0, 0], [1, 0], [0, 1], [1, 1]], rotations: 1 },
@@ -59,19 +61,22 @@ const SHAPE_DEFS: ShapeDef[] = [
     base: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1], [0, 2], [1, 2], [2, 2]],
     rotations: 1,
   },
-  { shape: 'L3', weight: 1.0, color: 6, base: [[0, 0], [0, 1], [1, 1]], rotations: 4 },
+  { shape: 'L3', weight: 1.3, color: 6, base: [[0, 0], [0, 1], [1, 1]], rotations: 4 },
   { shape: 'L4', weight: 1.0, color: 6, base: [[0, 0], [0, 1], [0, 2], [1, 2]], rotations: 4 },
-  { shape: 'S', weight: 1.0, color: 7, base: [[1, 0], [2, 0], [0, 1], [1, 1]], rotations: 2 },
-  { shape: 'Z', weight: 1.0, color: 7, base: [[0, 0], [1, 0], [1, 1], [2, 1]], rotations: 2 },
-  { shape: 'T', weight: 1.0, color: 8, base: [[0, 0], [1, 0], [2, 0], [1, 1]], rotations: 4 },
-  // diagonals: corner-touching cells that slot into checkerboard-style holes
+  // J is L's mirror image — no rotation of L reaches it, so without it half of
+  // all hook-shaped holes could never be filled by a 4-cell piece
+  { shape: 'J', weight: 1.0, color: 5, base: [[1, 0], [1, 1], [1, 2], [0, 2]], rotations: 4 },
+  { shape: 'S', weight: 0.8, color: 7, base: [[1, 0], [2, 0], [0, 1], [1, 1]], rotations: 2 },
+  { shape: 'Z', weight: 0.8, color: 7, base: [[0, 0], [1, 0], [1, 1], [2, 1]], rotations: 2 },
+  { shape: 'T', weight: 0.8, color: 8, base: [[0, 0], [1, 0], [2, 0], [1, 1]], rotations: 4 },
+  // diagonal pair: corner-touching cells that slot into checkerboard-style holes
   { shape: 'DIAG2', weight: 0.8, color: 1, base: [[0, 0], [1, 1]], rotations: 2 },
-  { shape: 'DIAG3', weight: 0.5, color: 4, base: [[0, 0], [1, 1], [2, 2]], rotations: 2 },
 ];
 
-function buildCatalog(): Piece[] {
+/** Expand shape definitions into dealt variants. Exported for the balance simulator. */
+export function buildCatalog(defs: readonly ShapeDef[] = SHAPE_DEFS): Piece[] {
   const pieces: Piece[] = [];
-  for (const def of SHAPE_DEFS) {
+  for (const def of defs) {
     let cells = normalize(def.base);
     for (let rot = 0; rot < def.rotations; rot++) {
       pieces.push({

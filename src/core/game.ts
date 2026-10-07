@@ -1,5 +1,5 @@
 import { Rng } from './rng';
-import { getPiece, rotatePiece } from './pieces';
+import { PIECES, getPiece, rotatePiece } from './pieces';
 import {
   BOARD_SIZE,
   CELL,
@@ -506,6 +506,10 @@ export class Game {
     const migrated = rest as { hold?: string | null; rescued?: boolean; used: Record<PowerUpKind, number | boolean> };
     migrated.hold ??= null;
     migrated.rescued ??= false;
+    // pieces retired from the catalog (e.g. the 3-cell diagonal) become dots
+    const known = (id: string | null) => (id && PIECES.some((p) => p.id === id) ? id : null);
+    rest.tray = rest.tray.map((id) => (id === null ? null : known(id) ?? 'DOT_0'));
+    migrated.hold = known(migrated.hold);
     // saves from the one-use-per-game era stored booleans
     for (const k of Object.keys(migrated.used) as PowerUpKind[]) migrated.used[k] = Number(migrated.used[k]);
     const aux = rest.aux as { times?: Record<number, number>; wilds?: number[] };

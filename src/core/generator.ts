@@ -37,8 +37,8 @@ function fullness(board: Board): number {
 }
 
 /** Deal weights, shifted toward small pieces when the board is crowded. */
-function dealWeights(fill: number): number[] {
-  return PIECES.map((p) => {
+function dealWeights(fill: number, catalog: readonly Piece[]): number[] {
+  return catalog.map((p) => {
     if (fill < CROWDED_FULLNESS) return p.weight;
     if (p.cells.length <= 3) return p.weight * CROWDED_SMALL_BOOST;
     if (p.cells.length >= 5) return p.weight * CROWDED_BIG_DAMP;
@@ -50,8 +50,20 @@ function dealWeights(fill: number): number[] {
  * Can the 3 pieces be placed in some order (clears along the way free space)?
  * Brute force over orderings × positions — tiny search space per spec §9.
  */
-export function isSetPlaceable(board: Board, pieceIds: readonly string[]): boolean {
-  return placeableRec(board, pieceIds.map(getPiece));
+export function isSetPlaceable(
+  board: Board,
+  pieceIds: readonly string[],
+  catalog: readonly Piece[] = PIECES,
+): boolean {
+  return placeableRec(board, pieceIds.map((id) => lookup(catalog, id)));
+}
+
+/** Piece by id within a catalog (the default catalog's fast path is getPiece). */
+function lookup(catalog: readonly Piece[], id: string): Piece {
+  if (catalog === PIECES) return getPiece(id);
+  const p = catalog.find((c) => c.id === id);
+  if (!p) throw new Error(`unknown piece: ${id}`);
+  return p;
 }
 
 function placeableRec(board: Board, pieces: Piece[]): boolean {
@@ -102,8 +114,8 @@ export function canCompleteAlmostFullLine(board: Board, piece: Piece): boolean {
   return false;
 }
 
-function rollSet(rng: Rng, weights: number[]): string[] {
-  return Array.from({ length: 3 }, () => rng.weightedPick(PIECES, weights).id);
+function rollSet(rng: Rng, weights: number[], catalog: readonly Piece[]): string[] {
+  return Array.from({ length: 3 }, () => rng.weightedPick(catalog, weights).id);
 }
 
 /**
@@ -113,26 +125,31 @@ function rollSet(rng: Rng, weights: number[]): string[] {
  * clear-less deals, or whenever the board is ≥60% full, bias toward a piece
  * that can complete an almost-full line.
  */
-export function dealTray(board: Board, rng: Rng, dealsSinceClear: number): string[] {
+export function dealTray(
+  board: Board,
+  rng: Rng,
+  dealsSinceClear: number,
+  catalog: readonly Piece[] = PIECES,
+): string[] {
   const fill = fullness(board);
-  const weights = dealWeights(fill);
-  let set = rollSet(rng, weights);
-  let placeable = isSetPlaceable(board, set);
+  const weights = dealWeights(fill, catalog);
+  let set = rollSet(rng, weights, catalog);
+  let placeable = isSetPlaceable(board, set, catalog);
   for (let i = 0; i < rerollBudget(fill) && !placeable; i++) {
-    set = rollSet(rng, weights);
-    placeable = isSetPlaceable(board, set);
+    set = rollSet(rng, weights, catalog);
+    placeable = isSetPlaceable(board, set, catalog);
   }
 
   const pity = dealsSinceClear >= PITY_DEALS || fill >= PITY_FULLNESS;
-  if (pity && !set.some((id) => canCompleteAlmostFullLine(board, getPiece(id)))) {
-    const completers = PIECES.filter((p) => canCompleteAlmostFullLine(board, p));
+  if (pity && !set.some((id) => canCompleteAlmostFullLine(board, lookup(catalog, id)))) {
+    const completers = catalog.filter((p) => canCompleteAlmostFullLine(board, p));
     if (completers.length > 0) {
       const replacement = completers[rng.int(completers.length)].id;
       const slot = rng.int(3);
       const candidate = [...set];
       candidate[slot] = replacement;
       // never trade a placeable set for an unplaceable one
-      if (!placeable || isSetPlaceable(board, candidate)) set = candidate;
+      if (!placeable || isSetPlaceable(board, candidate, catalog)) set = candidate;
     }
   }
   return set;
@@ -142,9 +159,9 @@ export function dealTray(board: Board, rng: Rng, dealsSinceClear: number): strin
  * Rush refill: one piece at a time, rerolled (≤5) until it fits somewhere on
  * the current board so the instant refill never hands over a dead piece.
  */
-export function dealSingle(board: Board, rng: Rng): string {
-  const weights = dealWeights(fullness(board));
-  let piece = rng.weightedPick(PIECES, weights);
-  for (let i = 0; i < 5 && !anyFit(board, piece); i++) piece = rng.weightedPick(PIECES, weights);
+export function dealSingle(board: Board, rng: Rng, catalog: readonly Piece[] = PIECES): string {
+  const weights = dealWeights(fullness(board), catalog);
+  let piece = rng.weightedPick(catalog, weights);
+  for (let i = 0; i < 5 && !anyFit(board, piece); i++) piece = rng.weightedPick(catalog, weights);
   return piece.id;
 }

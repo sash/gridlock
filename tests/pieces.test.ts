@@ -59,22 +59,38 @@ describe('piece catalog', () => {
     }
   });
 
-  test('weights lean small: dot and 1×2 common, 1×5 and 3×3 rare (per logical shape)', () => {
+  test('weights lean small: 3-cell pieces most common, 1×5 and 3×3 rare (per logical shape)', () => {
     const weightOf = (shape: string) =>
       PIECES.filter((p) => p.shape === shape).reduce((s, p) => s + p.weight, 0);
     expect(weightOf('SQ3')).toBeCloseTo(0.4);
     expect(weightOf('DOT')).toBeCloseTo(1.0);
     expect(weightOf('BAR2')).toBeCloseTo(1.2);
     expect(weightOf('BAR5')).toBeCloseTo(0.6);
-    expect(weightOf('BAR3')).toBeCloseTo(1.0);
-    expect(weightOf('T')).toBeCloseTo(1.0);
+    expect(weightOf('BAR3')).toBeCloseTo(1.3);
+    expect(weightOf('L3')).toBeCloseTo(1.3);
+    expect(weightOf('T')).toBeCloseTo(0.8);
+    expect(weightOf('L4')).toBeCloseTo(1.0);
+    expect(weightOf('J')).toBeCloseTo(1.0);
   });
 
-  test('diagonal pairs and triples come in both orientations', () => {
+  test('the diagonal pair comes in both orientations; the triple is retired', () => {
     const diag2 = PIECES.filter((p) => p.shape === 'DIAG2').map((p) => cellKey(p.cells));
-    const diag3 = PIECES.filter((p) => p.shape === 'DIAG3').map((p) => cellKey(p.cells));
     expect(diag2.sort()).toEqual(['0,0;1,1', '0,1;1,0']);
-    expect(diag3.sort()).toEqual(['0,0;1,1;2,2', '0,2;1,1;2,0']);
+    expect(PIECES.some((p) => p.shape === 'DIAG3')).toBe(false);
+  });
+
+  test('J is the mirror of L: every J variant is a reflected L variant and never equal to one', () => {
+    const mirror = (cells: ReadonlyArray<readonly [number, number]>) => {
+      const w = Math.max(...cells.map(([c]) => c));
+      return cellKey(cells.map(([c, r]) => [w - c, r] as const));
+    };
+    const lKeys = new Set(PIECES.filter((p) => p.shape === 'L4').map((p) => cellKey(p.cells)));
+    const js = PIECES.filter((p) => p.shape === 'J');
+    expect(js.length).toBe(4);
+    for (const j of js) {
+      expect(lKeys.has(cellKey(j.cells))).toBe(false);
+      expect(lKeys.has(mirror(j.cells))).toBe(true);
+    }
   });
 
   test('getPiece returns the variant by id', () => {
