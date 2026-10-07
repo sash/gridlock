@@ -31,9 +31,15 @@
         user-select: none;
         -webkit-touch-callout: none;
       }
-      #app,
-      #app canvas {
+      /* sized to the measured screen in iOS standalone mode (see src/ui/viewport.ts) */
+      #app {
         position: fixed;
+        inset: 0;
+        height: var(--gl-screen-h, auto);
+        touch-action: none;
+      }
+      #app canvas {
+        position: absolute;
         inset: 0;
         touch-action: none;
       }

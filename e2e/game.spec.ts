@@ -320,3 +320,29 @@ test('dragging a tray piece onto HOLD parks it, and it can be placed from there'
   expect(placed).toBe(true);
   expect(await page.evaluate(() => window.__game!.game!.state.hold)).toBeNull();
 });
+
+test('iOS standalone: canvas, HUD and dock span the measured screen, not the short viewport', async ({ browser }) => {
+  // installed-app mode reports a layout viewport shorter than the screen —
+  // emulate that gap and check nothing is sized to the short viewport
+  const ctx = await browser.newContext({ viewport: { width: 430, height: 860 }, hasTouch: true });
+  await ctx.addInitScript(() => {
+    Object.defineProperty(navigator, 'standalone', { get: () => true });
+    Object.defineProperty(screen, 'width', { get: () => 430 });
+    Object.defineProperty(screen, 'height', { get: () => 932 });
+  });
+  const page = await ctx.newPage();
+  await page.goto('/');
+  await page.click('[data-mode="classic"]');
+  await page.waitForFunction(() => window.__game?.game?.state.mode === 'classic');
+  const m = await page.evaluate(() => ({
+    screenVar: getComputedStyle(document.documentElement).getPropertyValue('--gl-screen-h').trim(),
+    canvasH: document.querySelector('canvas')!.getBoundingClientRect().height,
+    hudH: document.querySelector('.gl-hud')!.getBoundingClientRect().height,
+    dockBottom: document.getElementById('gl-powerups')!.getBoundingClientRect().bottom,
+  }));
+  expect(m.screenVar).toBe('932px');
+  expect(m.canvasH).toBe(932);
+  expect(m.hudH).toBe(932);
+  expect(m.dockBottom).toBeGreaterThan(900); // sits at the real bottom, past the short viewport
+  await ctx.close();
+});

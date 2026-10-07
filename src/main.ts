@@ -1,6 +1,7 @@
 import { Application } from 'pixi.js';
 import { GameApp } from './ui/app';
 import { getTheme } from './ui/theme';
+import { installScreenHeight } from './ui/viewport';
 
 declare global {
   interface Window {
@@ -9,32 +10,14 @@ declare global {
 }
 
 async function boot(): Promise<void> {
-  // Installed-app mode on iOS can report a layout viewport shorter than the
-  // physical screen, leaving a dead strip at the bottom that fixed elements
-  // (overlays, streak glow) don't cover. Measure the real screen instead.
-  const standalone =
-    window.matchMedia('(display-mode: standalone)').matches ||
-    (navigator as unknown as { standalone?: boolean }).standalone === true;
-  if (standalone) {
-    const setScreenH = () => {
-      // screen.width/height stay portrait-oriented on iOS even when rotated —
-      // pick the physical dimension that is currently vertical
-      const physical =
-        window.innerWidth > window.innerHeight
-          ? Math.min(screen.width, screen.height)
-          : Math.max(screen.width, screen.height);
-      document.documentElement.style.setProperty(
-        '--gl-screen-h',
-        `${Math.max(physical, window.innerHeight)}px`,
-      );
-    };
-    setScreenH();
-    window.addEventListener('resize', setScreenH);
-  }
+  installScreenHeight();
 
+  // the #app element is sized to the real screen (see index.html) — let the
+  // renderer follow it rather than the possibly-short window
+  const host = document.getElementById('app')!;
   const app = new Application();
   await app.init({
-    resizeTo: window,
+    resizeTo: host,
     resolution: Math.min(window.devicePixelRatio || 1, 2), // DPR 3 is wasted battery on flat shapes
     autoDensity: true,
     antialias: true,
@@ -43,7 +26,7 @@ async function boot(): Promise<void> {
     ).background,
     preference: 'webgl', // WebGL2 with automatic WebGL1 fallback
   });
-  document.getElementById('app')!.appendChild(app.canvas);
+  host.appendChild(app.canvas);
 
   window.__game = new GameApp(app);
 

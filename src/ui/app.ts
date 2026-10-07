@@ -11,6 +11,7 @@ import { Hud } from './hud';
 import { GameAudio } from './audio';
 import { getTheme, type Theme } from './theme';
 import * as storage from './storage';
+import { screenHeight } from './viewport';
 
 const LIFT_OFFSET = -80; // px above the finger so the thumb doesn't hide the piece
 const NEAR_DEATH_MOVES = 2;
@@ -232,8 +233,10 @@ export class GameApp {
   private layout(): void {
     // Window dimensions, not renderer ones: the renderer resize is deferred and
     // can be stale here, and CSS pixels are the space pointer events live in.
+    // Height comes from the measured screen so iOS standalone's short layout
+    // viewport doesn't squeeze the board and strand a dead strip at the bottom.
     const w = window.innerWidth;
-    const h = window.innerHeight;
+    const h = screenHeight();
     // Measure the real HUD bar: in standalone PWA mode on iPhone the safe-area
     // inset pushes it well below a hardcoded offset, overlapping the board.
     const topBar = this.hud.topBarBottom() + 12;

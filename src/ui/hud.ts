@@ -8,7 +8,7 @@ const CSS = `
     --gl-mint: #00bb88; --gl-violet: #9b5de5; --gl-pink: #f15bb5; --gl-blue: #4895ef;
     --gl-ink: #0b0e16; --gl-panel: #151a26; --gl-edge: rgba(255,255,255,0.07);
   }
-  .gl-hud { position: fixed; inset: 0; pointer-events: none; font-family: 'Quicksand', -apple-system, system-ui, sans-serif; color: var(--gl-text);
+  .gl-hud { position: fixed; inset: 0; height: var(--gl-screen-h, auto); /* full physical screen in iOS standalone */ pointer-events: none; font-family: 'Quicksand', -apple-system, system-ui, sans-serif; color: var(--gl-text);
     --gl-panel: var(--gl-theme-panel, #151a26); --gl-edge: var(--gl-theme-edge, rgba(255,255,255,0.07)); --gl-shadow: var(--gl-theme-shadow, rgba(0,0,0,0.4)); }
   /* overlays keep the dark Night-Arcade identity in every theme (their text is fixed light) */
   .gl-overlay { --gl-panel: #151a26; --gl-edge: rgba(255,255,255,0.07); --gl-shadow: rgba(0,0,0,0.4); }
