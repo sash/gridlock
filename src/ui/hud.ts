@@ -181,7 +181,19 @@ const SPECIAL_LESSONS: Record<SpecialKind, { glyph: string; name: string; color:
     glyph: '🌈',
     name: 'Wild zone',
     color: 'linear-gradient(135deg, #ef476f, #ffd166 40%, #06d6a0 70%, #4cc9f0)',
-    how: 'Clear 2 or more lines at once to earn one. Its rainbow cross never blocks your pieces, but counts as filled when completing a line — clear through it for an easy big clear. One clear uses it up.',
+    how: 'Clear 2 or more lines at once to earn one. Its rainbow cross reaches two cells each way, never blocks your pieces, and counts as filled when completing a line — clear through it for an easy big clear. One clear uses it up.',
+  },
+  cross: {
+    glyph: '✨',
+    name: 'Starburst',
+    color: 'linear-gradient(135deg, #ffd166, #ff7849)',
+    how: 'A starburst takes over one of your blocks. Clear its row or column and the crossing line goes too — both count as cleared lines for score and streak, stone included.',
+  },
+  prism: {
+    glyph: '🔮',
+    name: 'Prism',
+    color: 'linear-gradient(135deg, #9b5de5, #f15bb5)',
+    how: 'A prism takes over a block and remembers its colour. Clear its line and every block of that colour on the board shatters — +10 points each.',
   },
   bomb: {
     glyph: '💣',
@@ -298,13 +310,15 @@ export class Hud {
           <h3>Special cells <span style="font-weight:400;opacity:.7">(unlock as you level up — each gets a lesson when it arrives)</span></h3>
           <ul>
             <li>💎 <b>Gem</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.gem + 1})</span> — takes over one of your blocks; clear its line for +150 points.</li>
+            <li>✨ <b>Starburst</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.cross + 1})</span> — clear its line and the crossing line clears too, counting as an extra line.</li>
+            <li>🔮 <b>Prism</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.prism + 1})</span> — clear its line and every block of its colour shatters, +10 each.</li>
             <li>🧊 <b>Ice</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.ice + 1})</span> — takes two clears: the first cracks it, the second removes it.</li>
             <li>💣 <b>Bomb</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.bomb + 1})</span> — the number counts your placements. Clear its line in time and it
             blasts a 5×5 area free — stone included, and nearby bombs go off too. It glows red in
             its last 3 placements; let it hit 0 and it petrifies…</li>
             <li>🪨 <b>Stone</b> — blocks your pieces. Clear a line through or right next to it to
             shatter it, or wait 8 placements for it to crumble.</li>
-            <li>🌈 <b>Wild zone</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.wild + 1})</span> — earned by clearing 2+ lines at once. Its rainbow cross never blocks
+            <li>🌈 <b>Wild zone</b> <span style="opacity:.6">(level ${UNLOCK_LEVEL.wild + 1})</span> — earned by clearing 2+ lines at once. Its rainbow cross (two cells each way) never blocks
             your pieces but counts as filled when completing lines — clear through it for an easy
             big clear. One clear uses it up.</li>
             <li>⏱ <b>Time target</b> <span style="opacity:.7">(Rush only)</span> — a glowing ring marks a block worth bonus seconds; clear its line in time to bank them.</li>

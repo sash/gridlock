@@ -178,6 +178,39 @@ describe('placement', () => {
     expect(res.gemBonus).toBe(150);
   });
 
+  test('starburst: its clear fires the crossing column, counted as a second line', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    g.state.board[idx(3, 0)] = CELL.CROSS;
+    for (let r = 1; r < 6; r++) g.state.board[idx(3, r)] = 2; // partial column under it
+    g.state.board[idx(6, 6)] = 1; // avoid a perfect clear
+    const res = g.place(0, 7, 0)!;
+    expect(res.lines.rows).toEqual([0]);
+    expect(res.starburstLines).toEqual({ rows: [], cols: [3] });
+    expect(res.linesCleared).toBe(2);
+    expect(res.starburstCells.length).toBe(5);
+    for (let r = 1; r < 6; r++) expect(g.state.board[idx(3, r)]).toBe(CELL.EMPTY);
+    expect(g.state.score).toBe(1 + 200 * 1.5); // 1 cell + a 2-line clear at streak 1
+    expect(g.state.totalLines).toBe(2);
+  });
+
+  test('prism: its clear shatters every block of its colour, +10 each', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    fillRowExcept(g, 0, 7);
+    g.state.board[idx(2, 0)] = CELL.PRISM;
+    g.state.aux.prisms[idx(2, 0)] = 4;
+    g.state.board[idx(5, 5)] = 4;
+    g.state.board[idx(1, 6)] = 4;
+    g.state.board[idx(6, 6)] = 7; // other colour stays
+    const res = g.place(0, 7, 0)!;
+    expect(res.prismCells.sort((x, y) => x - y)).toEqual([idx(5, 5), idx(1, 6)].sort((x, y) => x - y));
+    expect(res.prismPoints).toBe(20);
+    expect(g.state.board[idx(6, 6)]).toBe(7);
+    expect(g.state.score).toBe(1 + 120 + 20);
+  });
+
   test('a line cleared beside a stone shatters it', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];

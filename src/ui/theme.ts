@@ -65,6 +65,8 @@ export const SPECIAL_COLORS: Record<number, number> = {
   [CELL.BOMB]: 0x3b3f4a,
   [CELL.STONE]: 0x8a8d96,
   [CELL.WILD]: 0xffffff,
+  [CELL.CROSS]: 0xffd166,
+  [CELL.PRISM]: 0xbf5bff,
 };
 
 export const SPECIAL_GLYPHS: Record<number, string> = {
@@ -74,6 +76,8 @@ export const SPECIAL_GLYPHS: Record<number, string> = {
   [CELL.BOMB]: '💣',
   [CELL.STONE]: '🪨',
   [CELL.WILD]: '🌈',
+  [CELL.CROSS]: '✨',
+  [CELL.PRISM]: '🔮',
 };
 
 export function getTheme(id: string | null): Theme {

@@ -29,7 +29,9 @@ const HOLD_INTRO = '📥 Tip: drag a piece onto HOLD to save it for later';
 const UNLOCK_TOAST: Record<SpecialKind, string> = {
   gem: '💎 Gems unlocked — clear their line for +150',
   wild: '🌈 Wild zones unlocked — clear 2 lines at once to earn one',
+  cross: '✨ Starbursts unlocked — their clear fires the crossing line too',
   bomb: '💣 Bombs unlocked — clear their line before the counter hits 0',
+  prism: '🔮 Prisms unlocked — their clear shatters every block of their colour',
   ice: '🧊 Ice unlocked — it takes two clears',
 };
 
@@ -39,6 +41,8 @@ const SPECIAL_TAP_INFO: Record<number, string> = {
   [CELL.ICE]: '🧊 Ice — needs two clears: first cracks it, second removes it',
   [CELL.CRACKED]: '🧊 Cracked ice — one more clear removes it',
   [CELL.BOMB]: '💣 Bomb — clear its line before the counter reaches 0 to blast a 5×5 area; too late and it turns to stone',
+  [CELL.CROSS]: '✨ Starburst — clear its row or column and the crossing line clears too (counts as an extra line)',
+  [CELL.PRISM]: '🔮 Prism — clear its line and every block of its colour shatters, +10 each',
   [CELL.STONE]: `🪨 Stone — clear a line through or right beside it to shatter it; otherwise it crumbles after ${STONE_LIFETIME} placements`,
   [CELL.WILD]: '🌈 Wild zone — never blocks your pieces, but its cross counts as filled when completing lines. One clear through it uses it up',
 };
@@ -520,6 +524,18 @@ export class GameApp {
         0xffffff,
       );
       if (result.blastCenters.length > 0) this.blastFx(result);
+      if (result.starburstCells.length > 0 || result.starburstLines.rows.length + result.starburstLines.cols.length > 0) {
+        this.particles.burst(result.starburstCells, result.starburstLines, this.board.cellSize, 0xffd166);
+        this.shake(BLAST_SHAKE_S, this.board.cellSize * 0.15);
+        this.audio.powerUp();
+        const extra = result.starburstLines.rows.length + result.starburstLines.cols.length;
+        this.hud.toast(`✨ Starburst! +${extra} line${extra === 1 ? '' : 's'}`, 1500);
+      }
+      if (result.prismCells.length > 0) {
+        this.particles.burst(result.prismCells, { rows: [], cols: [] }, this.board.cellSize, 0xbf5bff);
+        this.audio.powerUp();
+        this.hud.toast(`🔮 Prism! ${result.prismCells.length} blocks shattered, +${result.prismPoints}`, 1500);
+      }
       if (result.shatteredCells.length > 0) this.hud.toast('🪨 Stone shattered!', 1200);
     } else {
       nativeHaptic('place');

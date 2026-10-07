@@ -7,11 +7,15 @@ export const BOMB_WARN_AT = 3;
 export const STONE_LIFETIME = 8; // placements before a stone crumbles
 export const GEM_EVERY_DEALS = 3;
 export const ICE_EVERY_DEALS = 5;
+export const CROSS_EVERY_DEALS = 6;
+export const PRISM_EVERY_DEALS = 8;
+/** How far a wild zone's cross reaches from its centre. */
+export const WILD_REACH = 2;
 
-export type SpecialKind = 'gem' | 'wild' | 'bomb' | 'ice';
+export type SpecialKind = 'gem' | 'wild' | 'cross' | 'bomb' | 'prism' | 'ice';
 /** Specials arrive one at a time with the level ladder (a level is LINES_PER_LEVEL cleared lines). */
-export const UNLOCK_LEVEL: Record<SpecialKind, number> = { gem: 2, wild: 3, bomb: 5, ice: 8 };
-export const SPECIAL_ORDER: readonly SpecialKind[] = ['gem', 'wild', 'bomb', 'ice'];
+export const UNLOCK_LEVEL: Record<SpecialKind, number> = { gem: 2, wild: 3, cross: 4, bomb: 5, prism: 6, ice: 8 };
+export const SPECIAL_ORDER: readonly SpecialKind[] = ['gem', 'wild', 'cross', 'bomb', 'prism', 'ice'];
 
 /** Specials whose unlock level lies in (before, after]. */
 export function unlockedBetween(levelBefore: number, levelAfter: number): SpecialKind[] {
@@ -27,25 +31,29 @@ export interface SpecialsState {
   stones: Record<number, number>;
   /** Rush only: cells whose clear banks bonus seconds. */
   times: Record<number, number>;
-  /** Wild zone centers: plus-shaped auras that help complete lines. */
+  /** Wild zone centers: cross-shaped auras that help complete lines. */
   wilds: number[];
+  /** Prism cells → the colour they took over (what their clear shatters). */
+  prisms: Record<number, number>;
 }
 
 export function createSpecialsState(): SpecialsState {
-  return { bombs: {}, stones: {}, times: {}, wilds: [] };
+  return { bombs: {}, stones: {}, times: {}, wilds: [], prisms: {} };
 }
 
-/** Plus-shaped aura of one or more wild centers, clipped at board edges. */
+/** Cross-shaped aura (arms WILD_REACH long) of one or more wild centers, clipped at board edges. */
 export function wildAura(centers: readonly number[]): Set<number> {
   const aura = new Set<number>();
   for (const center of centers) {
     const c = center % BOARD_SIZE;
     const r = Math.floor(center / BOARD_SIZE);
     aura.add(center);
-    if (c > 0) aura.add(center - 1);
-    if (c < BOARD_SIZE - 1) aura.add(center + 1);
-    if (r > 0) aura.add(center - BOARD_SIZE);
-    if (r < BOARD_SIZE - 1) aura.add(center + BOARD_SIZE);
+    for (let d = 1; d <= WILD_REACH; d++) {
+      if (c - d >= 0) aura.add(center - d);
+      if (c + d < BOARD_SIZE) aura.add(center + d);
+      if (r - d >= 0) aura.add(center - d * BOARD_SIZE);
+      if (r + d < BOARD_SIZE) aura.add(center + d * BOARD_SIZE);
+    }
   }
   return aura;
 }
@@ -112,6 +120,17 @@ export function spawnOnDeal(
           colFill[cell % BOARD_SIZE] >= ICE_MIN_LINE_FILL),
     );
     if (i >= 0) board[i] = CELL.ICE;
+  }
+  if (level >= UNLOCK_LEVEL.cross && dealNumber > 0 && dealNumber % CROSS_EVERY_DEALS === 0) {
+    const i = randomCellWhere(board, rng, plainBlock);
+    if (i >= 0) board[i] = CELL.CROSS;
+  }
+  if (level >= UNLOCK_LEVEL.prism && dealNumber > 0 && dealNumber % PRISM_EVERY_DEALS === 0) {
+    const i = randomCellWhere(board, rng, plainBlock);
+    if (i >= 0) {
+      aux.prisms[i] = board[i];
+      board[i] = CELL.PRISM;
+    }
   }
   if (level >= UNLOCK_LEVEL.bomb && dealNumber > 0 && dealNumber % BOMB_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
@@ -206,11 +225,63 @@ export function explodeBomb(board: Board, aux: SpecialsState, center: number): B
         if (v === CELL.GEM) result.gems.push(i);
         if (isFilled(v)) result.cleared.push(i);
         delete aux.stones[i];
+        delete aux.prisms[i];
         board[i] = CELL.EMPTY;
       }
     }
   }
   return result;
+}
+
+/** Empties one cell of any kind, dropping whatever per-cell state it carried. */
+function wipe(board: Board, aux: SpecialsState, i: number): boolean {
+  const was = isFilled(board[i]);
+  board[i] = CELL.EMPTY;
+  delete aux.bombs[i];
+  delete aux.stones[i];
+  delete aux.prisms[i];
+  return was;
+}
+
+/**
+ * Starburst cleared: its row and column both go, stone included. Lines the
+ * clear already took are skipped; the rest count as extra cleared lines.
+ */
+export function starburst(
+  board: Board,
+  aux: SpecialsState,
+  center: number,
+  already: { rows: readonly number[]; cols: readonly number[] },
+): { cells: number[]; extraLines: number; rows: number[]; cols: number[] } {
+  const c = center % BOARD_SIZE;
+  const r = Math.floor(center / BOARD_SIZE);
+  const out = { cells: [] as number[], extraLines: 0, rows: [] as number[], cols: [] as number[] };
+  if (!already.rows.includes(r)) {
+    out.rows.push(r);
+    out.extraLines++;
+    for (let cc = 0; cc < BOARD_SIZE; cc++) if (wipe(board, aux, r * BOARD_SIZE + cc)) out.cells.push(r * BOARD_SIZE + cc);
+  }
+  if (!already.cols.includes(c)) {
+    out.cols.push(c);
+    out.extraLines++;
+    for (let rr = 0; rr < BOARD_SIZE; rr++) if (wipe(board, aux, rr * BOARD_SIZE + c)) out.cells.push(rr * BOARD_SIZE + c);
+  }
+  return out;
+}
+
+/** Prism cleared: every plain block of the colour it took over shatters. */
+export function prismShatter(board: Board, aux: SpecialsState, center: number): number[] {
+  const color = aux.prisms[center];
+  delete aux.prisms[center];
+  const cells: number[] = [];
+  if (!color) return cells;
+  for (let i = 0; i < board.length; i++) {
+    if (board[i] === color) {
+      board[i] = CELL.EMPTY;
+      cells.push(i);
+    }
+  }
+  return cells;
 }
 
 /**

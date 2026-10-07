@@ -13,14 +13,16 @@ import {
   type Board,
   type Lines,
 } from './board';
-import { GEM_BONUS, PERFECT_CLEAR_BONUS, STREAK_MULTIPLIER_CAP, linePoints, streakMultiplier, updateStreak } from './scoring';
+import { GEM_BONUS, PERFECT_CLEAR_BONUS, PRISM_BLOCK_POINTS, STREAK_MULTIPLIER_CAP, linePoints, streakMultiplier, updateStreak } from './scoring';
 import {
   UNLOCK_LEVEL,
   createSpecialsState,
   explodeBomb,
   grantWild,
+  prismShatter,
   shatterStones,
   spawnOnDeal,
+  starburst,
   type SpecialKind,
   unlockedBetween,
   tickPlacement,
@@ -99,6 +101,12 @@ export interface PlaceResult {
   crackedCells: number[];
   /** Stones shattered early by a clear touching them. */
   shatteredCells: number[];
+  /** Cells a starburst's crossing lines emptied, and those lines. */
+  starburstCells: number[];
+  starburstLines: Lines;
+  /** Blocks a prism shattered (all of its colour). */
+  prismCells: number[];
+  prismPoints: number;
   perfectClear: boolean;
   gameOver: boolean;
   zenDissolved: boolean;
@@ -243,6 +251,10 @@ export class Game {
       blastCenters: [],
       crackedCells: [],
       shatteredCells: [],
+      starburstCells: [],
+      starburstLines: { rows: [], cols: [] },
+      prismCells: [],
+      prismPoints: 0,
       perfectClear: false,
       gameOver: false,
       zenDissolved: false,
@@ -261,12 +273,28 @@ export class Game {
     const lines = findCompletedLines(s.board, aura);
     result.lines = lines;
     result.linesCleared = lines.rows.length + lines.cols.length;
-    const levelBefore = levelFor(s.totalLines);
-    s.totalLines += result.linesCleared;
-    result.unlocked = unlockedBetween(levelBefore, levelFor(s.totalLines));
     const clearRes = applyClears(s.board, lines);
     result.clearedCells = clearRes.clearedCells;
     result.crackedCells = clearRes.cracked;
+
+    // starbursts fire their crossing lines — those count as cleared lines too
+    for (const cross of clearRes.crosses) {
+      const burst = starburst(s.board, s.aux, cross, {
+        rows: [...lines.rows, ...result.starburstLines.rows],
+        cols: [...lines.cols, ...result.starburstLines.cols],
+      });
+      result.starburstCells.push(...burst.cells);
+      result.starburstLines.rows.push(...burst.rows);
+      result.starburstLines.cols.push(...burst.cols);
+      result.linesCleared += burst.extraLines;
+    }
+    for (const prism of clearRes.prisms) result.prismCells.push(...prismShatter(s.board, s.aux, prism));
+    result.prismPoints = result.prismCells.length * PRISM_BLOCK_POINTS;
+    s.score += result.prismPoints;
+
+    const levelBefore = levelFor(s.totalLines);
+    s.totalLines += result.linesCleared;
+    result.unlocked = unlockedBetween(levelBefore, levelFor(s.totalLines));
 
     const lineCells = new Set<number>();
     for (const r of lines.rows) for (let c = 0; c < BOARD_SIZE; c++) lineCells.add(idx(c, r));
@@ -345,7 +373,7 @@ export class Game {
   private updateTimeTargets(result: PlaceResult): void {
     const s = this.state;
     if (s.mode !== 'rush' || s.rushTimeLeft === null) return;
-    for (const i of [...result.clearedCells, ...result.explodedCells]) {
+    for (const i of [...result.clearedCells, ...result.explodedCells, ...result.starburstCells, ...result.prismCells]) {
       const seconds = s.aux.times[i];
       if (seconds) {
         result.timeGained += seconds;
@@ -428,6 +456,7 @@ export class Game {
         s.board[i] = CELL.EMPTY;
         delete s.aux.bombs[i];
         delete s.aux.stones[i];
+        delete s.aux.prisms[i];
         delete s.aux.times[i];
       }
     }
@@ -484,6 +513,7 @@ export class Game {
     s.board[i] = CELL.EMPTY;
     delete s.aux.bombs[i];
     delete s.aux.stones[i];
+    delete s.aux.prisms[i];
     delete s.aux.times[i]; // hammering a target forfeits it
     s.used.hammer++;
     return true;
@@ -528,9 +558,10 @@ export class Game {
     migrated.hold = known(migrated.hold);
     // saves from the one-use-per-game era stored booleans
     for (const k of Object.keys(migrated.used) as PowerUpKind[]) migrated.used[k] = Number(migrated.used[k]);
-    const aux = rest.aux as { times?: Record<number, number>; wilds?: number[] };
+    const aux = rest.aux as { times?: Record<number, number>; wilds?: number[]; prisms?: Record<number, number> };
     aux.times ??= {};
     aux.wilds ??= [];
+    aux.prisms ??= {};
     // legacy saves stored wilds as board cells — lift them into zones
     for (let i = 0; i < board.length; i++) {
       if (board[i] === CELL.WILD) {

@@ -1,7 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { BOARD_SIZE, CELL, idx, type Board, type Lines } from '../core/board';
 import { getPiece } from '../core/pieces';
-import { BOMB_WARN_AT, type SpecialsState } from '../core/specials';
+import { BOMB_WARN_AT, WILD_REACH, type SpecialsState } from '../core/specials';
 import { SPECIAL_COLORS, SPECIAL_GLYPHS, type Theme } from './theme';
 
 const GAP = 2;
@@ -159,14 +159,12 @@ export class BoardView {
     for (const center of aux.wilds) {
       const cc = center % BOARD_SIZE;
       const cr = Math.floor(center / BOARD_SIZE);
-      const arms: Array<[number, number]> = [
-        [cc, cr - 1],
-        [cc - 1, cr],
-        [cc, cr],
-        [cc + 1, cr],
-        [cc, cr + 1],
-      ];
-      arms.forEach(([c, r], i) => {
+      // arms reach WILD_REACH cells; each direction keeps its own rainbow colour
+      const arms: Array<[number, number, number]> = [[cc, cr, 2]];
+      for (let d = 1; d <= WILD_REACH; d++) {
+        arms.push([cc, cr - d, 0], [cc - d, cr, 1], [cc + d, cr, 3], [cc, cr + d, 4]);
+      }
+      arms.forEach(([c, r, i]) => {
         if (c < 0 || c >= BOARD_SIZE || r < 0 || r >= BOARD_SIZE) return;
         this.cells
           .roundRect(c * cs + GAP + 1, r * cs + GAP + 1, cs - GAP * 2 - 2, cs - GAP * 2 - 2, cs * 0.16)

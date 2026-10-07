@@ -16,6 +16,10 @@ export const CELL = {
   BOMB: 19,
   STONE: 20,
   WILD: 21,
+  /** Starburst: its clear also fires the crossing line. */
+  CROSS: 22,
+  /** Prism: its clear shatters every block of its colour. */
+  PRISM: 23,
 } as const;
 
 export type Board = Uint8Array;
@@ -89,6 +93,10 @@ export interface ClearResult {
   bombs: number[];
   /** Ice cells that cracked on this clear (stay filled). */
   cracked: number[];
+  /** Starburst cells cleared (each fires its crossing line). */
+  crosses: number[];
+  /** Prism cells cleared (each shatters its colour). */
+  prisms: number[];
 }
 
 /** Empties every cell of the completed lines, honoring special-cell rules. */
@@ -97,7 +105,7 @@ export function applyClears(board: Board, lines: Lines): ClearResult {
   for (const r of lines.rows) for (let c = 0; c < BOARD_SIZE; c++) targets.add(idx(c, r));
   for (const c of lines.cols) for (let r = 0; r < BOARD_SIZE; r++) targets.add(idx(c, r));
 
-  const result: ClearResult = { clearedCells: [], gems: [], bombs: [], cracked: [] };
+  const result: ClearResult = { clearedCells: [], gems: [], bombs: [], cracked: [], crosses: [], prisms: [] };
   for (const i of targets) {
     const v = board[i];
     switch (v) {
@@ -114,6 +122,16 @@ export function applyClears(board: Board, lines: Lines): ClearResult {
         break;
       case CELL.BOMB:
         result.bombs.push(i);
+        board[i] = CELL.EMPTY;
+        result.clearedCells.push(i);
+        break;
+      case CELL.CROSS:
+        result.crosses.push(i);
+        board[i] = CELL.EMPTY;
+        result.clearedCells.push(i);
+        break;
+      case CELL.PRISM:
+        result.prisms.push(i);
         board[i] = CELL.EMPTY;
         result.clearedCells.push(i);
         break;

@@ -1,5 +1,7 @@
 export const PERFECT_CLEAR_BONUS = 300;
 export const GEM_BONUS = 150;
+/** Points per block a prism shatters. */
+export const PRISM_BLOCK_POINTS = 10;
 export const STREAK_MULTIPLIER_CAP = 5;
 
 const LINE_POINTS = [0, 80, 200, 450];

@@ -13,6 +13,8 @@ import {
   STONE_LIFETIME,
   UNLOCK_LEVEL,
   unlockedBetween,
+  starburst,
+  prismShatter,
 } from '../src/core/specials';
 
 function board(fill: (c: number, r: number) => boolean = () => false): Board {
@@ -34,15 +36,15 @@ describe('spawnOnDeal', () => {
     expect([...b].filter((v) => v === CELL.GEM).length).toBe(1); // not a 3rd deal
   });
 
-  test('specials unlock with the level ladder: gem 2, wild 3, bomb 5, ice 8', () => {
-    expect(UNLOCK_LEVEL).toEqual({ gem: 2, wild: 3, bomb: 5, ice: 8 });
+  test('specials unlock with the level ladder: gem 2, wild 3, cross 4, bomb 5, prism 6, ice 8', () => {
+    expect(UNLOCK_LEVEL).toEqual({ gem: 2, wild: 3, cross: 4, bomb: 5, prism: 6, ice: 8 });
     const b = board((c) => c < 4);
     spawnOnDeal(b, createSpecialsState(), new Rng(1), 3, 1); // level 1: no gem yet
     expect([...b].includes(CELL.GEM)).toBe(false);
     spawnOnDeal(b, createSpecialsState(), new Rng(1), 10, 4); // level 4: no bomb yet
     expect([...b].includes(CELL.BOMB)).toBe(false);
     expect(unlockedBetween(1, 2)).toEqual(['gem']);
-    expect(unlockedBetween(2, 5)).toEqual(['wild', 'bomb']);
+    expect(unlockedBetween(2, 5)).toEqual(['wild', 'cross', 'bomb']);
     expect(unlockedBetween(5, 5)).toEqual([]);
   });
 
@@ -85,6 +87,20 @@ describe('spawnOnDeal', () => {
     expect(Math.floor(bombIdx / 8)).toBeLessThan(3);
     expect(aux.bombs[bombIdx]).toBe(BOMB_FUSE);
     expect(BOMB_FUSE).toBe(12);
+  });
+
+  test('starburst and prism take over placed blocks on their deals once unlocked', () => {
+    const b = board((c, r) => c < 3 && r < 3);
+    const aux = createSpecialsState();
+    spawnOnDeal(b, aux, new Rng(1), 6, 3); // level 3: no starburst yet
+    expect([...b].includes(CELL.CROSS)).toBe(false);
+    spawnOnDeal(b, aux, new Rng(1), 6, 4);
+    expect([...b].filter((v) => v === CELL.CROSS).length).toBe(1);
+    spawnOnDeal(b, aux, new Rng(2), 8, 6);
+    const prism = [...b].findIndex((v) => v === CELL.PRISM);
+    expect(prism).toBeGreaterThanOrEqual(0);
+    expect(aux.prisms[prism]).toBe(1); // remembers the colour it took over
+    expect([...b].filter((v) => v === CELL.EMPTY).length).toBe(64 - 9); // no free space eaten
   });
 
   test('no specials on a non-multiple deal', () => {
@@ -244,18 +260,53 @@ describe('grantWild', () => {
 });
 
 describe('wildAura', () => {
-  test('covers a plus shape: center + 4 orthogonal neighbors', () => {
+  test('covers a cross reaching two cells each way', () => {
     const aura = wildAura([idx(4, 4)]);
-    expect([...aura].sort((a, b2) => a - b2)).toEqual(
-      [idx(4, 3), idx(3, 4), idx(4, 4), idx(5, 4), idx(4, 5)].sort((a, b2) => a - b2),
-    );
+    const expected = [idx(4, 4)];
+    for (const d of [1, 2]) expected.push(idx(4 - d, 4), idx(4 + d, 4), idx(4, 4 - d), idx(4, 4 + d));
+    expect([...aura].sort((a, b2) => a - b2)).toEqual(expected.sort((a, b2) => a - b2));
   });
 
   test('clips at board edges', () => {
     const aura = wildAura([idx(0, 0)]);
-    expect(aura.size).toBe(3); // center, right, down
-    expect(aura.has(idx(0, 0))).toBe(true);
-    expect(aura.has(idx(1, 0))).toBe(true);
-    expect(aura.has(idx(0, 1))).toBe(true);
+    expect(aura.size).toBe(5); // center, right×2, down×2
+    expect(aura.has(idx(2, 0))).toBe(true);
+    expect(aura.has(idx(0, 2))).toBe(true);
+  });
+});
+
+describe('starburst', () => {
+  test('clears the crossing lines (stone included) and skips lines already cleared', () => {
+    const b = board(() => true);
+    const aux = createSpecialsState();
+    b[idx(5, 3)] = CELL.STONE;
+    aux.stones[idx(5, 3)] = 8;
+    const out = starburst(b, aux, idx(2, 3), { rows: [3], cols: [] });
+    expect(out.rows).toEqual([]);
+    expect(out.cols).toEqual([2]);
+    expect(out.extraLines).toBe(1);
+    expect(out.cells.length).toBe(8);
+    for (let r = 0; r < 8; r++) expect(b[idx(2, r)]).toBe(CELL.EMPTY);
+    expect(b[idx(5, 3)]).toBe(CELL.STONE); // row 3 was the line already cleared — untouched here
+    const again = starburst(b, aux, idx(5, 5), { rows: [], cols: [] });
+    expect(again.extraLines).toBe(2);
+    expect(b[idx(5, 3)]).toBe(CELL.EMPTY); // stone in the fired column is gone
+    expect(aux.stones[idx(5, 3)]).toBeUndefined();
+  });
+});
+
+describe('prismShatter', () => {
+  test('removes every plain block of the remembered colour and nothing else', () => {
+    const b = board();
+    const aux = createSpecialsState();
+    b[idx(0, 0)] = 3; b[idx(7, 7)] = 3; b[idx(4, 4)] = 3;
+    b[idx(1, 1)] = 5;
+    b[idx(2, 2)] = CELL.GEM;
+    aux.prisms[idx(6, 6)] = 3;
+    const cells = prismShatter(b, aux, idx(6, 6));
+    expect(cells.sort((x, y) => x - y)).toEqual([idx(0, 0), idx(4, 4), idx(7, 7)]);
+    expect(b[idx(1, 1)]).toBe(5);
+    expect(b[idx(2, 2)]).toBe(CELL.GEM);
+    expect(aux.prisms[idx(6, 6)]).toBeUndefined();
   });
 });
