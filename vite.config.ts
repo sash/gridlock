@@ -21,6 +21,8 @@ export default defineConfig({
   base: './',
   build: { target: 'es2022', assetsInlineLimit: 32768 },
   plugins: [stampServiceWorker()],
+  // shown on the menu so a device can be checked against the deployed build
+  define: { __GL_BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ') + 'Z') },
   server: { host: true },
   test: {
     include: ['tests/**/*.test.ts'],

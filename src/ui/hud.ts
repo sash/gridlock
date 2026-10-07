@@ -8,7 +8,9 @@ const CSS = `
     --gl-mint: #00bb88; --gl-violet: #9b5de5; --gl-pink: #f15bb5; --gl-blue: #4895ef;
     --gl-ink: #0b0e16; --gl-panel: #151a26; --gl-edge: rgba(255,255,255,0.07);
   }
-  .gl-hud { position: fixed; inset: 0; height: var(--gl-screen-h, auto); /* full physical screen in iOS standalone */ pointer-events: none; font-family: 'Quicksand', -apple-system, system-ui, sans-serif; color: var(--gl-text);
+  /* Every layer is absolute inside <body>, which is sized to the real screen — never fixed:
+     iOS standalone clips fixed elements to its under-reported layout viewport (see index.html). */
+  .gl-hud { position: absolute; inset: 0; pointer-events: none; font-family: 'Quicksand', -apple-system, system-ui, sans-serif; color: var(--gl-text);
     --gl-panel: var(--gl-theme-panel, #151a26); --gl-edge: var(--gl-theme-edge, rgba(255,255,255,0.07)); --gl-shadow: var(--gl-theme-shadow, rgba(0,0,0,0.4)); }
   /* overlays keep the dark Night-Arcade identity in every theme (their text is fixed light) */
   .gl-overlay { --gl-panel: #151a26; --gl-edge: rgba(255,255,255,0.07); --gl-shadow: rgba(0,0,0,0.4); }
@@ -49,7 +51,7 @@ const CSS = `
   .gl-pu .count { position: absolute; top: -6px; right: -6px; background: var(--gl-amber); color: #1d1500; font-size: 11px; font-weight: 800; border-radius: 9px; min-width: 18px; height: 18px; line-height: 18px; box-shadow: 0 2px 0 rgba(0,0,0,0.35); }
 
   /* ---------- overlays ---------- */
-  .gl-overlay { position: fixed; inset: 0; height: 100vh; height: 100lvh; height: var(--gl-screen-h, 100lvh); /* full physical screen in iOS standalone */
+  .gl-overlay { position: absolute; inset: 0;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 13px;
     color: #f2f5ff; pointer-events: auto; padding: 24px; text-align: center;
     background:
@@ -104,6 +106,7 @@ const CSS = `
   [data-mode="rush"] { --accent: var(--gl-coral); }
   [data-mode="zen"] { --accent: var(--gl-mint); }
   .gl-mode-desc { display: block; font-size: 12px; font-weight: 600; opacity: 0.6; }
+  .gl-build { position: absolute; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); text-align: center; font-size: 10px; letter-spacing: 1px; opacity: 0.35; }
 
   /* help panel */
   #gl-overlay-help { justify-content: flex-start; padding-top: max(7vh, env(safe-area-inset-top, 0px)); }
@@ -117,12 +120,12 @@ const CSS = `
 
 
   /* ---------- feedback ---------- */
-  .gl-glow { position: fixed; inset: 0; height: 100vh; height: 100lvh; height: var(--gl-screen-h, 100lvh); pointer-events: none; opacity: 0; transition: opacity 0.5s; box-shadow: inset 0 0 70px 14px var(--gl-coral); }
-  .gl-toast { position: fixed; top: 17%; left: 50%; transform: translateX(-50%); background: rgba(17,21,32,0.95); color: #f2f5ff;
+  .gl-glow { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.5s; box-shadow: inset 0 0 70px 14px var(--gl-coral); }
+  .gl-toast { position: absolute; top: 17%; left: 50%; transform: translateX(-50%); background: rgba(17,21,32,0.95); color: #f2f5ff;
     border: 1px solid var(--gl-edge); border-left: 4px solid var(--gl-amber);
     padding: 11px 18px; border-radius: 14px; font-weight: 700; font-size: 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
     max-width: 80vw; text-align: left; z-index: 5; box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
-  .gl-cheer { position: fixed; top: 26%; left: 0; right: 0; text-align: center; font-family: 'Bungee', sans-serif; font-size: 38px;
+  .gl-cheer { position: absolute; top: 26%; left: 0; right: 0; text-align: center; font-family: 'Bungee', sans-serif; font-size: 38px;
     letter-spacing: 1px; pointer-events: none; opacity: 0; text-shadow: 0 4px 0 rgba(0,0,0,0.4), 0 0 30px rgba(255,255,255,0.25); }
   .gl-cheer .sub { display: block; font-family: 'Quicksand', sans-serif; font-size: 16px; font-weight: 700; opacity: 0.9; margin-top: 4px; }
   .gl-cheer.pop { animation: gl-cheer-pop 1.1s ease-out; }
@@ -134,7 +137,7 @@ const CSS = `
     100% { opacity: 0; transform: scale(1) translateY(-26px); }
   }
   /* add-to-home-screen hint (iOS Safari, browser mode only) */
-  .gl-install { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
+  .gl-install { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom, 0px) + 84px);
     width: min(340px, 88vw); background: var(--gl-panel); border: 1px solid var(--gl-edge); border-radius: 16px;
     padding: 12px 14px; display: flex; gap: 10px; align-items: center; pointer-events: auto; z-index: 6;
     box-shadow: 0 8px 28px rgba(0,0,0,0.45); font-size: 13px; font-weight: 600; line-height: 1.45; text-align: left;
@@ -229,6 +232,7 @@ export class Hud {
         ).join('')}
         <button class="gl-btn hidden" id="gl-newgame-btn">🔁 New game</button>
         <button class="gl-btn" id="gl-help-btn-menu">❓ How to play</button>
+        <div class="gl-build">build ${__GL_BUILD__}</div>
       </div>
       <div class="gl-overlay hidden" id="gl-overlay-help">
         <h2>How to play</h2>

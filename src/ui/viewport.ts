@@ -31,6 +31,15 @@ export function installScreenHeight(): void {
   if (!isStandalone()) return;
   measure();
   window.addEventListener('resize', measure);
+  // The document is taller than the (under-reported) layout viewport, so iOS
+  // would let a drag scroll it by the difference. Only overlays may scroll.
+  document.addEventListener(
+    'touchmove',
+    (e) => {
+      if (!(e.target as Element | null)?.closest?.('.gl-overlay')) e.preventDefault();
+    },
+    { passive: false },
+  );
 }
 
 /** The height everything full-screen should use, in CSS pixels. */

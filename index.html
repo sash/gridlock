@@ -19,11 +19,21 @@
     />
     <title>GridLock</title>
     <style>
+      /*
+       * The page is one screen tall and nothing in it is position: fixed.
+       * iOS standalone (home-screen) mode under-reports the layout viewport
+       * by the status-bar height and clips fixed elements to that short box,
+       * leaving a dead band at the bottom — but normal-flow content laid out
+       * to the measured screen height (--gl-screen-h, set by
+       * src/ui/viewport.ts) does paint there. Everything hangs off <body>.
+       */
       html,
       body {
         margin: 0;
         padding: 0;
-        height: 100%;
+        height: 100vh;
+        height: 100dvh;
+        height: var(--gl-screen-h, 100dvh);
         background: #10131a;
         overflow: hidden;
         overscroll-behavior: none;
@@ -31,13 +41,10 @@
         user-select: none;
         -webkit-touch-callout: none;
       }
-      /* sized to the measured screen in iOS standalone mode (see src/ui/viewport.ts) */
-      #app {
-        position: fixed;
-        inset: 0;
-        height: var(--gl-screen-h, auto);
-        touch-action: none;
+      body {
+        position: relative;
       }
+      #app,
       #app canvas {
         position: absolute;
         inset: 0;

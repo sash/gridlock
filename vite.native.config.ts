@@ -14,5 +14,6 @@ export default defineConfig({
   define: {
     // the WebView shell has no service worker; make sure registration is skipped
     'import.meta.env.NATIVE': 'true',
+    __GL_BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ') + 'Z'),
   },
 });
