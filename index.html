@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#10131a" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bungee&family=Quicksand:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>GridLock</title>
+    <style>
+      /*
+       * The page is one screen tall and nothing in it is position: fixed.
+       * iOS standalone (home-screen) mode under-reports the layout viewport
+       * by the status-bar height and clips fixed elements to that short box,
+       * leaving a dead band at the bottom — but normal-flow content laid out
+       * to the measured screen height (--gl-screen-h, set by
+       * src/ui/viewport.ts) does paint there. Everything hangs off <body>.
+       */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100vh;
+        height: 100dvh;
+        height: var(--gl-screen-h, 100dvh);
+        background: #10131a;
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+      body {
+        position: relative;
+      }
+      #app,
+      #app canvas {
+        position: absolute;
+        inset: 0;
+        touch-action: none;
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-CAj8JZcS.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/Geometry-DYwWNA0a.js">
+    <link rel="modulepreload" crossorigin href="./assets/RenderTargetSystem-BXy590gQ.js">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
