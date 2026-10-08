@@ -104,6 +104,7 @@ describe('placement', () => {
       g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
     }
     g.state.tray = ['DOT_0', 'SQ3_0', null];
+    g.state.hold = 'SQ3_0'; // hold occupied too — no escape that way
     g.state.rescued = true; // last chance already spent
     const res = g.place(0, 0, 0)!;
     expect(res.linesCleared).toBe(0);
@@ -119,6 +120,7 @@ describe('placement', () => {
       g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
     }
     g.state.tray = ['DOT_0', 'SQ3_0', null];
+    g.state.hold = 'SQ3_0';
     const res = g.place(0, 0, 0)!;
     expect(res.gameOver).toBe(false);
     expect(res.lastChance).toBe(true);
@@ -367,6 +369,40 @@ describe('hold slot', () => {
     expect(g.totalValidMoves()).toBeGreaterThan(0);
   });
 
+  test('one unplaceable piece left with HOLD empty is not game over — holding it deals again', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    for (let i = 0; i < 64; i++) g.state.board[i] = 1;
+    for (let k = 0; k < 8; k++) {
+      g.state.board[idx(k, k)] = CELL.EMPTY;
+      g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
+    }
+    g.state.tray = ['DOT_0', 'SQ3_0', null];
+    g.state.rescued = true; // no last chance either — the hold must carry this
+    const res = g.place(0, 0, 0)!;
+    expect(res.gameOver).toBe(false);
+    expect(g.state.over).toBe(false);
+    expect(g.totalValidMoves()).toBe(0);
+    expect(g.canEscapeByHolding()).toBe(true);
+    const deal = g.state.dealNumber;
+    g.holdPiece(1);
+    expect(g.state.hold).toBe('SQ3_0');
+    expect(g.state.dealNumber).toBe(deal + 1);
+  });
+
+  test('two unplaceable pieces with HOLD empty is stuck (holding one does not deal)', () => {
+    const g = new Game({ mode: 'classic', seed: 1 });
+    for (let i = 0; i < 64; i++) g.state.board[i] = 1;
+    for (let k = 0; k < 8; k++) {
+      g.state.board[idx(k, k)] = CELL.EMPTY;
+      g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
+    }
+    g.state.tray = ['DOT_0', 'SQ3_0', 'SQ3_0'];
+    g.state.rescued = true;
+    const res = g.place(0, 0, 0)!;
+    expect(g.canEscapeByHolding()).toBe(false);
+    expect(res.gameOver).toBe(true);
+  });
+
   test('cannot hold from the hold slot or an empty slot', () => {
     const g = new Game({ mode: 'classic', seed: 1 });
     g.state.tray = [null, 'DOT_0', 'DOT_0'];
@@ -482,6 +518,7 @@ describe('modes', () => {
       g.state.board[idx((k + 1) % 8, k)] = CELL.EMPTY;
     }
     g.state.tray = ['DOT_0', 'SQ3_0', null];
+    g.state.hold = 'SQ3_0';
     const res = g.place(0, 0, 0)!;
     expect(res.gameOver).toBe(false);
     expect(g.state.over).toBe(false);

@@ -416,9 +416,21 @@ export class Game {
     return this.totalValidMoves() > 0;
   }
 
+  /**
+   * Nothing fits, but parking a piece in the empty hold slot would bring a
+   * fresh deal: in Rush any held piece is refilled; in other modes only the
+   * last tray piece triggers a deal (holding one of several just shuffles).
+   */
+  canEscapeByHolding(): boolean {
+    const s = this.state;
+    if (s.hold !== null) return false;
+    const left = s.tray.filter((t) => t !== null).length;
+    return s.mode === 'rush' ? left > 0 : left === 1;
+  }
+
   private resolveStuckBoard(result: StuckOutcome): void {
     const s = this.state;
-    if (this.hasAnyMove()) return;
+    if (this.hasAnyMove() || this.canEscapeByHolding()) return;
     if (s.mode === 'zen') {
       // Zen: the fullest rows dissolve (2 per pass) until something fits again
       for (let pass = 0; pass < 4 && !this.hasAnyMove(); pass++) {

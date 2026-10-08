@@ -71,6 +71,7 @@ export class GameApp {
   private armed: PowerUpKind | null = null;
   private inventory = storage.getInventory();
   private nearDeathZones = new Set<number>();
+  private holdEscapeHinted = false;
   private pulsePhase = 0;
   private shakeLeft = 0;
   private shakeTotal = 0;
@@ -308,6 +309,14 @@ export class GameApp {
     this.nearDeathZones.clear();
     if (!g || g.state.over) return;
     const moves = g.totalValidMoves();
+    if (moves === 0 && g.canEscapeByHolding()) {
+      if (!this.holdEscapeHinted) {
+        this.holdEscapeHinted = true;
+        this.hud.toast('📥 Nothing fits — drop it on HOLD for a fresh deal', 3000);
+      }
+    } else {
+      this.holdEscapeHinted = false;
+    }
     if (moves > 0 && moves <= NEAR_DEATH_MOVES) {
       for (const slot of [0, 1, 2, HOLD_SLOT]) {
         const id = g.pieceAt(slot);
