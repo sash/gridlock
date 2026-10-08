@@ -26,6 +26,17 @@ function nativeHaptic(kind: 'place' | 'clear' | 'big-clear' | 'perfect' | 'game-
 }
 
 const HOLD_INTRO = '📥 Tip: drag a piece onto HOLD to save it for later';
+/** Board cell → the special kind it belongs to (stone is part of the bomb lesson). */
+const CELL_KIND: Record<number, SpecialKind> = {
+  [CELL.GEM]: 'gem',
+  [CELL.ICE]: 'ice',
+  [CELL.CRACKED]: 'ice',
+  [CELL.BOMB]: 'bomb',
+  [CELL.STONE]: 'bomb',
+  [CELL.CROSS]: 'cross',
+  [CELL.PRISM]: 'prism',
+};
+
 const UNLOCK_TOAST: Record<SpecialKind, string> = {
   gem: '💎 Gems unlocked — clear their line for +150',
   wild: '🌈 Wild zones unlocked — clear 2 lines at once to earn one',
@@ -497,6 +508,7 @@ export class GameApp {
     this.persist();
     this.refresh();
     if (outcome.gameOver) this.finishGame();
+    else setTimeout(() => this.introduceAppeared(), 250);
     return true;
   }
 
@@ -524,7 +536,7 @@ export class GameApp {
           this.audio.say(`Level ${after + 1}!`);
           this.refresh();
         }, 750);
-        if (unlocked.length) setTimeout(() => this.introduceUnlocked(unlocked), 1600);
+        if (unlocked.length) setTimeout(() => unlocked.forEach((k) => this.hud.toast(UNLOCK_TOAST[k], 3000)), 1600);
       }
       this.particles.burst(
         [...result.clearedCells, ...result.shatteredCells],
@@ -571,6 +583,8 @@ export class GameApp {
     this.persist();
     this.refresh();
     this.introduceHold();
+    // lessons come with the first special of each kind the player ever sees on the board
+    setTimeout(() => this.introduceAppeared(), result.linesCleared > 0 ? 1100 : 250);
     if (result.gameOver) this.finishGame();
     return result;
   }
@@ -633,25 +647,37 @@ export class GameApp {
     this.audio.say(text.replace(/!+/g, '!'));
   }
 
+  /** Special kinds currently on the board (or, for wilds, in play). */
+  private specialsPresent(): SpecialKind[] {
+    const g = this.game!;
+    const kinds = new Set<SpecialKind>();
+    for (const v of g.state.board) {
+      const kind = CELL_KIND[v];
+      if (kind) kinds.add(kind);
+    }
+    if (g.state.aux.wilds.length > 0) kinds.add('wild');
+    return [...kinds];
+  }
+
   /**
-   * A level-up just unlocked new specials: the first time ever on this device
-   * each gets a lesson card (one after another); later games get a toast.
+   * The first time a special of some kind ever appears on this device, a
+   * lesson card explains it (several new kinds queue one after another).
    */
-  private introduceUnlocked(kinds: SpecialKind[]): void {
-    const [kind, ...rest] = kinds;
-    if (!kind) return;
-    const next = () => this.introduceUnlocked(rest);
-    if (storage.markIntroSeen(kind)) {
+  private introduceAppeared(): void {
+    const g = this.game;
+    if (!g || g.state.over) return;
+    const fresh = this.specialsPresent().filter((k) => storage.markIntroSeen(k));
+    const show = (queue: SpecialKind[]) => {
+      const [kind, ...rest] = queue;
+      if (!kind) return;
       this.cancelDrag();
       this.audio.powerUp();
       this.hud.showIntro(kind, () => {
         this.refresh();
-        next();
+        show(rest);
       });
-    } else {
-      this.hud.toast(UNLOCK_TOAST[kind], 3000);
-      next();
-    }
+    };
+    show(fresh);
   }
 
   /** One-time tip once the player has seen a second deal. */

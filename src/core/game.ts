@@ -20,6 +20,7 @@ import {
   explodeBomb,
   grantWild,
   prismShatter,
+  pruneUnder,
   shatterStones,
   spawnOnDeal,
   starburst,
@@ -351,6 +352,7 @@ export class Game {
     }
 
     tickPlacement(s.board, s.aux);
+    pruneUnder(s.board, s.aux);
     this.updateTimeTargets(result);
 
     if (slot === HOLD_SLOT) {
@@ -570,10 +572,11 @@ export class Game {
     migrated.hold = known(migrated.hold);
     // saves from the one-use-per-game era stored booleans
     for (const k of Object.keys(migrated.used) as PowerUpKind[]) migrated.used[k] = Number(migrated.used[k]);
-    const aux = rest.aux as { times?: Record<number, number>; wilds?: number[]; prisms?: Record<number, number> };
+    const aux = rest.aux as { times?: Record<number, number>; wilds?: number[]; prisms?: Record<number, number>; under?: Record<number, number> };
     aux.times ??= {};
     aux.wilds ??= [];
     aux.prisms ??= {};
+    aux.under ??= {};
     // legacy saves stored wilds as board cells — lift them into zones
     for (let i = 0; i < board.length; i++) {
       if (board[i] === CELL.WILD) {

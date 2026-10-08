@@ -100,6 +100,9 @@ describe('spawnOnDeal', () => {
     const prism = [...b].findIndex((v) => v === CELL.PRISM);
     expect(prism).toBeGreaterThanOrEqual(0);
     expect(aux.prisms[prism]).toBe(1); // remembers the colour it took over
+    expect(aux.under[prism]).toBe(1); // and draws it underneath
+    const cross = [...b].findIndex((v) => v === CELL.CROSS);
+    expect(aux.under[cross]).toBe(1);
     expect([...b].filter((v) => v === CELL.EMPTY).length).toBe(64 - 9); // no free space eaten
   });
 

@@ -261,6 +261,9 @@ test('tapping a special brick explains it; menu offers New game mid-game', async
   });
   await page.mouse.click(origin.x + origin.cs / 2, origin.y + origin.cs / 2);
   await expect(page.locator('#gl-toast')).toContainText('Gem');
+  // the first gem ever seen also brings its lesson card — dismiss it
+  await expect(page.locator('#gl-overlay-intro')).toBeVisible();
+  await page.click('#gl-intro-close');
   // ☰ menu mid-game offers New game and can be closed in place
   await page.click('#gl-menu-btn');
   await expect(page.locator('#gl-menu-close')).toBeVisible();
@@ -374,7 +377,7 @@ test('iOS standalone: canvas, HUD and dock span the measured screen, not the sho
   await ctx.close();
 });
 
-test('levelling into a new special shows its lesson card once, then a toast', async ({ page }, testInfo) => {
+test('the first gem on the board brings its lesson card once; levelling into gems is a toast', async ({ page }, testInfo) => {
   await startClassic(page);
   const clearOneLine = () =>
     page.evaluate(() => {
@@ -384,11 +387,13 @@ test('levelling into a new special shows its lesson card once, then a toast', as
       g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
       window.__game!.placeAt(0, 7, 0);
     });
-  // 5 lines = level 1; one more clear reaches level 2 → gems unlock
+  // a gem sitting on the board after a placement → lesson card
   await page.evaluate(() => {
-    window.__game!.game!.state.totalLines = 5;
+    const g = window.__game!.game!;
+    g.state.board[8 * 6 + 2] = 16; // CELL.GEM
+    g.state.tray = ['DOT_0', 'DOT_0', 'DOT_0'];
+    window.__game!.placeAt(0, 4, 4);
   });
-  await clearOneLine();
   const card = page.locator('#gl-overlay-intro');
   await expect(card).toBeVisible({ timeout: 5000 });
   await expect(card).toContainText('Gem');
@@ -396,7 +401,11 @@ test('levelling into a new special shows its lesson card once, then a toast', as
   await page.screenshot({ path: testInfo.outputPath('intro-card.png') });
   await page.click('#gl-intro-close');
   await expect(card).toBeHidden();
-  // unlocking the same special again gets a toast, not the card
+  // the gem is still there — no second card
+  await page.evaluate(() => window.__game!.placeAt(1, 5, 5));
+  await page.waitForTimeout(600);
+  await expect(card).toBeHidden();
+  // levelling into gems announces the unlock with a toast
   await page.evaluate(() => {
     window.__game!.game!.state.totalLines = 5;
   });

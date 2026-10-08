@@ -35,10 +35,12 @@ export interface SpecialsState {
   wilds: number[];
   /** Prism cells → the colour they took over (what their clear shatters). */
   prisms: Record<number, number>;
+  /** Special cell → colour of the player's block it took over (drawn underneath it). */
+  under: Record<number, number>;
 }
 
 export function createSpecialsState(): SpecialsState {
-  return { bombs: {}, stones: {}, times: {}, wilds: [], prisms: {} };
+  return { bombs: {}, stones: {}, times: {}, wilds: [], prisms: {}, under: {} };
 }
 
 /** Cross-shaped aura (arms WILD_REACH long) of one or more wild centers, clipped at board edges. */
@@ -97,9 +99,13 @@ export function spawnOnDeal(
   touched?: Uint8Array | null,
 ): void {
   void touched;
+  const takeOver = (i: number, cell: number) => {
+    aux.under[i] = board[i];
+    board[i] = cell;
+  };
   if (level >= UNLOCK_LEVEL.gem && dealNumber > 0 && dealNumber % GEM_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
-    if (i >= 0) board[i] = CELL.GEM;
+    if (i >= 0) takeOver(i, CELL.GEM);
   }
   if (level >= UNLOCK_LEVEL.ice && dealNumber > 0 && dealNumber % ICE_EVERY_DEALS === 0) {
     // freeze a plain filled cell (not a special) in a line that's already
@@ -119,23 +125,23 @@ export function spawnOnDeal(
         (rowFill[Math.floor(cell / BOARD_SIZE)] >= ICE_MIN_LINE_FILL ||
           colFill[cell % BOARD_SIZE] >= ICE_MIN_LINE_FILL),
     );
-    if (i >= 0) board[i] = CELL.ICE;
+    if (i >= 0) takeOver(i, CELL.ICE);
   }
   if (level >= UNLOCK_LEVEL.cross && dealNumber > 0 && dealNumber % CROSS_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
-    if (i >= 0) board[i] = CELL.CROSS;
+    if (i >= 0) takeOver(i, CELL.CROSS);
   }
   if (level >= UNLOCK_LEVEL.prism && dealNumber > 0 && dealNumber % PRISM_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
     if (i >= 0) {
       aux.prisms[i] = board[i];
-      board[i] = CELL.PRISM;
+      takeOver(i, CELL.PRISM);
     }
   }
   if (level >= UNLOCK_LEVEL.bomb && dealNumber > 0 && dealNumber % BOMB_EVERY_DEALS === 0) {
     const i = randomCellWhere(board, rng, plainBlock);
     if (i >= 0) {
-      board[i] = CELL.BOMB;
+      takeOver(i, CELL.BOMB);
       aux.bombs[i] = BOMB_FUSE;
     }
   }
@@ -226,11 +232,22 @@ export function explodeBomb(board: Board, aux: SpecialsState, center: number): B
         if (isFilled(v)) result.cleared.push(i);
         delete aux.stones[i];
         delete aux.prisms[i];
+        delete aux.under[i];
         board[i] = CELL.EMPTY;
       }
     }
   }
   return result;
+}
+
+/** Special cells that live on top of a player's block (stone is petrified, not a takeover). */
+export const TAKEOVER_CELLS: ReadonlySet<number> = new Set([CELL.GEM, CELL.ICE, CELL.CRACKED, CELL.BOMB, CELL.CROSS, CELL.PRISM]);
+
+/** Drop `under` entries whose cell is no longer a takeover special. */
+export function pruneUnder(board: Board, aux: SpecialsState): void {
+  for (const key of Object.keys(aux.under)) {
+    if (!TAKEOVER_CELLS.has(board[Number(key)])) delete aux.under[Number(key)];
+  }
 }
 
 /** Empties one cell of any kind, dropping whatever per-cell state it carried. */
@@ -240,6 +257,7 @@ function wipe(board: Board, aux: SpecialsState, i: number): boolean {
   delete aux.bombs[i];
   delete aux.stones[i];
   delete aux.prisms[i];
+  delete aux.under[i];
   return was;
 }
 

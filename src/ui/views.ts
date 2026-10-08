@@ -130,7 +130,16 @@ export class BoardView {
             this.glyphs.addChild(badge);
           }
         } else {
-          drawCell(g, x, y, cs, SPECIAL_COLORS[v] ?? 0x888888);
+          const under = aux.under?.[idx(c, r)];
+          if (under) {
+            // a special that took over the player's block: the block shows through, tinted
+            drawBlock(g, x, y, cs, this.theme.colors[under - 1], tier);
+            g.roundRect(x + GAP, y + GAP, cs - GAP * 2, cs - GAP * 2, cs * 0.18)
+              .fill({ color: SPECIAL_COLORS[v] ?? 0x888888, alpha: 0.5 })
+              .stroke({ color: SPECIAL_COLORS[v] ?? 0x888888, width: 2.5, alpha: 0.95 });
+          } else {
+            drawCell(g, x, y, cs, SPECIAL_COLORS[v] ?? 0x888888);
+          }
           const glyph = new Text({
             text: SPECIAL_GLYPHS[v] ?? '?',
             style: { fontSize: cs * 0.5 },
